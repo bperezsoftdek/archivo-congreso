@@ -1,0 +1,48 @@
+tables:
+  actas_sesiones:
+    pk: id_acta
+    label: "Actas de sesiones"
+    subfondo_cod: ACT
+    # header=None — columnas por índice posicional (0-based)
+    columns:
+      nivel_descripcion:                 0
+      codigo_referencia:                 1
+      titulo_formal:                     2
+      titulo_atribuido:                  3
+      tipologia:                         4
+      tomo_caja_numero:                  5
+      alterno:                           6
+      carpeta:                           7
+      fecha_inicial_ano:                 8
+      fecha_inicial_mes:                 9
+      fecha_inicial_dia:                 10
+      fecha_final_ano:                   11
+      fecha_final_mes:                   12
+      fecha_final_dia:                   13
+      soporte:                           14
+      volumen:                           15
+      nombre_productor:                  16
+      historia_institucional:            17
+      historia_archivistica:             18
+      lugar:                             19
+      alcance_contenido:                 20
+      palabras_clave:                    21
+      funciones_congreso:                22
+      condiciones_acceso:                23
+      condiciones_reproduccion:          24
+      lengua_documentos:                 25
+      caracteristicas_tecnicas:          26
+      instrumentos_descripcion:          27
+      existencia_originales:             28
+      unidades_descripcion_relacionadas: 29
+      notas:                             30
+      nombre_digitador:                  31
+      reglas_normas:                     32
+      fecha_descripcion:                 33
+    date_columns:
+      - fecha_inicial_ano
+      - fecha_inicial_mes
+      - fecha_inicial_dia
+      - fecha_final_ano
+      - fecha_final_mes
+      - fecha_final_dia

@@ -1,0 +1,61 @@
+================================================================================
+  GUÍA: CONFIGURACIÓN Y VARIABLES DE ENTORNO
+================================================================================
+
+1. ARCHIVO .env (RAÍZ DEL PROYECTO)
+-----------------------------------
+
+  Variable           | Descripción                    | Valor por defecto
+  -------------------|--------------------------------|---------------------------
+  POSTGRES_USER      | Usuario PostgreSQL             | congreso
+  POSTGRES_PASSWORD  | Contraseña                     | congreso123
+  POSTGRES_DB        | Nombre de la base              | archivo_congreso
+  POSTGRES_HOST      | Host (en Docker: postgres)     | postgres
+  POSTGRES_PORT      | Puerto                         | 5432
+  DATABASE_URL       | URL completa para el backend   | postgresql://...
+
+  Opcional en producción:
+  TOKEN_SECRET       | Clave para firmar tokens JWT-like (security.py)
+                       Si no se define, usa valor local por defecto.
+
+
+2. DOCKER-COMPOSE
+-----------------
+  - postgres: monta database/init.sql en /docker-entrypoint-initdb.d/
+  - backend:  puerto 8000, volumen ./backend, volumen uploads
+  - frontend: puerto 3000, VITE_API_URL=http://localhost:8000
+
+  Tras cambiar .env:
+    docker-compose down
+    docker-compose up --build
+
+
+3. PROXY DEL FRONTEND (vite.config.js)
+--------------------------------------
+  Las peticiones a /api se redirigen a http://backend:8000 dentro de la red
+  Docker. Timeout extendido a 600000 ms para cargas grandes.
+
+
+4. CONFIGURACIÓN DE TABLAS (tables_config.yaml)
+-------------------------------------------------
+  Ubicación: backend/tables_config.yaml
+
+  Se carga una sola vez al iniciar el backend. Tras modificarlo:
+    docker-compose restart backend
+
+  Campos por tabla:
+    pk            — Clave primaria en PostgreSQL
+    label         — Nombre visible en la interfaz
+    subfondo_cod  — Código en catálogo sub_fondo
+    columns       — Mapeo columna_BD: índice_excel (0-based)
+    date_columns  — Columnas numéricas de fecha (año/mes/día)
+
+  Ver procedimiento completo: 06-anadir-nuevo-tipo-documental.txt
+
+
+5. REINICIO SELECTIVO DE SERVICIOS
+----------------------------------
+  docker-compose restart backend    → Tras cambiar YAML o código Python
+  docker-compose restart frontend → Tras cambios solo en React (hot reload
+                                    suele bastar con volumen montado)
+  docker-compose restart postgres → Tras cambios en init.sql solo en BD nueva

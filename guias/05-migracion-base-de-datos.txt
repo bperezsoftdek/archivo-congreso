@@ -1,0 +1,84 @@
+================================================================================
+  GUÍA: MIGRACIÓN E INICIALIZACIÓN DE BASE DE DATOS
+================================================================================
+
+1. INICIALIZACIÓN AUTOMÁTICA (DOCKER)
+--------------------------------------
+  Al crear el contenedor postgres por primera vez, Docker ejecuta:
+    database/init.sql
+
+  Contenido principal:
+    - Tablas fondo y sub_fondo (catálogo archivístico)
+    - Tablas documentales (actas_sesiones, proyectos_ley, etc.)
+    - registro_operaciones + función fn_auditoria + triggers
+    - Datos semilla de fondos y subfondos
+    - Tablas de soporte para cargas y duplicados (según versión del script)
+
+  El volumen pgdata persiste los datos entre reinicios.
+
+
+2. RESETEAR BASE DE DATOS (DESARROLLO / TESTING)
+------------------------------------------------
+  ADVERTENCIA: Borra todos los datos.
+
+    docker-compose down -v
+    docker-compose up --build
+
+  El flag -v elimina el volumen pgdata. init.sql se vuelve a ejecutar.
+
+
+3. MIGRACIÓN SIN DOCKER
+-----------------------
+  1. Instalar PostgreSQL 15+.
+  2. Crear base archivo_congreso y usuario con permisos.
+  3. Ejecutar:
+       psql -U congreso -d archivo_congreso -f database/init.sql
+  4. Ajustar DATABASE_URL en .env del backend.
+  5. Iniciar backend; ensure_users_table() crea tabla usuarios y admin.
+
+
+4. AÑADIR TABLAS NUEVAS A UNA BD EXISTENTE
+------------------------------------------
+  Opción A — Editar init.sql y recrear volumen (solo si puede perder datos).
+  Opción B — Ejecutar SQL manualmente en producción:
+
+    CREATE TABLE nueva_tabla (...);
+    INSERT INTO sub_fondo (...) VALUES (...);
+    Añadir entrada en backend/tables_config.yaml;
+    docker-compose restart backend.
+
+
+5. TABLAS DE SOPORTE DE CARGA (CREADAS EN RUNTIME)
+--------------------------------------------------
+  El backend puede crear si no existen:
+    - carga_archivos
+    - carga_registros_hash
+    - usuarios (security.ensure_users_table)
+    - archivo_cargado, carga_duplicados_bd, carga_duplicados_archivo
+      (según implementación en documentos.py e init.sql)
+
+
+6. SEMILLA DE HASHES PARA TABLAS CON DATOS PREVIOS
+--------------------------------------------------
+  En la primera carga a una tabla que ya tiene filas, _seed_existing_hashes()
+  rellena carga_registros_hash desde los datos existentes para detectar
+  duplicados correctamente.
+
+
+7. BACKUP RECOMENDADO (PRODUCCIÓN)
+----------------------------------
+  Antes de migraciones:
+
+    docker exec <contenedor_postgres> pg_dump -U congreso archivo_congreso \
+      > backup_YYYYMMDD.sql
+
+  Restaurar:
+
+    psql -U congreso -d archivo_congreso < backup_YYYYMMDD.sql
+
+
+8. AUDITORÍA Y TRIGGERS
+-----------------------
+  Cada tabla documental puede tener trigger que llama fn_auditoria.
+  Durante carga masiva los triggers se deshabilitan temporalmente
+  (DISABLE TRIGGER ALL) y se reactivan al finalizar el job.

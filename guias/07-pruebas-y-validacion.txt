@@ -1,0 +1,87 @@
+================================================================================
+  GUÍA: PRUEBAS Y VALIDACIÓN DEL SISTEMA
+================================================================================
+
+PRECONDICIÓN
+------------
+  docker-compose up --build
+  http://localhost:3000 y http://localhost:8000/docs
+
+
+1. PRUEBAS DE API (BACKEND)
+---------------------------
+
+  Login:
+    POST /api/auth/login
+    Body: {"username":"admin","password":"admin123"}
+
+  Listar tablas:
+    GET /api/tablas
+    Header: Authorization: Bearer <token>
+
+  Carga:
+    POST /api/upload/{tabla}
+    multipart: file=@archivo.xlsx
+    Respuesta: {"job_id":"..."}
+    GET /api/upload/progress/{job_id} hasta status=done
+
+  Eliminación múltiple (admin):
+    POST /api/registros/delete-multiple/{tabla}
+    Body: {"ids": [1, 2, 3]}
+
+  Consulta:
+    GET /api/consultar/{tabla}?filtros...
+
+
+2. PRUEBAS DE INTERFAZ
+----------------------
+
+  Carga con duplicados:
+    [ ] Barra de progreso
+    [ ] Resumen insertados / omitidos
+    [ ] Sección expandible de duplicados
+    [ ] Enlaces a reportes Excel si aplica
+
+  Consulta y eliminación (admin):
+    [ ] Checkboxes visibles
+    [ ] Seleccionar todo / deseleccionar
+    [ ] Confirmación antes de eliminar
+    [ ] Mensaje de éxito y recarga de tabla
+
+  Consulta (rol consulta):
+    [ ] Sin checkboxes ni botón eliminar
+
+  Auditoría:
+    [ ] Operaciones DELETE_MULTIPLE registradas
+
+  Usuarios:
+    [ ] CRUD solo para admin
+
+
+3. CASOS LÍMITE
+---------------
+  - Eliminar ID inexistente → failed_ids en respuesta
+  - Archivo sin duplicados → inserción total
+  - Excel con filas vacías → omitidas
+  - Columnas fuera de rango → columnas_no_encontradas en resultado
+
+
+4. REGRESIONES A VERIFICAR
+--------------------------
+  Exportar CSV, filtros, ordenamiento, paginación, login/logout,
+  roles, carga sin duplicados.
+
+
+5. RESETEO PARA PRUEBAS LIMPIAS
+-------------------------------
+  docker-compose down -v
+  docker-compose up --build
+
+
+6. CHECKLIST FINAL
+------------------
+  [ ] API delete-multiple responde 200
+  [ ] Upload devuelve registros_duplicados
+  [ ] Solo admin elimina desde Consulta
+  [ ] Auditoría coherente
+  [ ] Sin regresiones en consulta y exportación

@@ -1,0 +1,32 @@
+# Variables de entorno (contraseñas y secretos)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+*.local
+
+# Docker / datos locales
+uploads/
+*.log
+
+# IDE y sistema
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Reportes y cargas generados
+backend/uploads/
+backend/exports/
+*.xlsx
+*.xls
+!guias/**

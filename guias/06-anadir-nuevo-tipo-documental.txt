@@ -1,0 +1,71 @@
+================================================================================
+  GUÍA: AÑADIR UN NUEVO TIPO DOCUMENTAL (TABLA)
+================================================================================
+
+El sistema está diseñado para ampliar tipos documentales sin modificar código
+Python ni React: solo base de datos + tables_config.yaml + reinicio del backend.
+
+PASO 1 — CREAR TABLA EN POSTGRESQL
+----------------------------------
+  Añadir al final de database/init.sql (entornos nuevos) o ejecutar SQL en BD
+  existente:
+
+    CREATE TABLE IF NOT EXISTS mi_nueva_tabla (
+        id_mi_tabla SERIAL PRIMARY KEY,
+        id_fondo INT REFERENCES fondo(id_fondo),
+        id_subfondo INT REFERENCES sub_fondo(id_subfondo),
+        -- columnas de metadatos según plantilla Excel
+        titulo_formal TEXT,
+        ...
+    );
+
+  Registrar en catálogo:
+
+    INSERT INTO sub_fondo (cod_subfondo, desc_subfondo, tabla_sql, id_fondo)
+    VALUES ('COD', 'Descripción visible', 'mi_nueva_tabla', 1);
+
+
+PASO 2 — CONFIGURAR tables_config.yaml
+--------------------------------------
+  En backend/tables_config.yaml, bajo tables:
+
+    mi_nueva_tabla:
+      pk: id_mi_tabla
+      label: "Nombre en la interfaz"
+      subfondo_cod: COD
+      columns:
+        titulo_formal: 0
+        codigo_referencia: 1
+        ...
+      date_columns:
+        - fecha_inicial_ano
+        - fecha_inicial_mes
+
+  columns: índice de columna en Excel (0 = columna A), no nombre de encabezado.
+  Las columnas id_fondo e id_subfondo se asignan automáticamente en la carga.
+
+
+PASO 3 — TRIGGER DE AUDITORÍA (RECOMENDADO)
+-------------------------------------------
+  Replicar patrón de otras tablas en init.sql:
+
+    CREATE TRIGGER tr_auditoria_mi_tabla
+    AFTER INSERT OR UPDATE OR DELETE ON mi_nueva_tabla
+    FOR EACH ROW EXECUTE FUNCTION fn_auditoria('id_mi_tabla');
+
+
+PASO 4 — REINICIAR BACKEND
+--------------------------
+    docker-compose restart backend
+
+  El endpoint GET /api/tablas expondrá el nuevo label automáticamente.
+
+
+PASO 5 — PROBAR
+---------------
+  1. Login como operador o admin.
+  2. Registro → elegir nuevo tipo → subir Excel de prueba.
+  3. Consulta → verificar inserción y filtros.
+
+  Plantilla Excel: misma estructura de filas que el resto de tipos
+  (encabezados en filas 1-3, datos desde fila 5 en adelante según iter_rows).

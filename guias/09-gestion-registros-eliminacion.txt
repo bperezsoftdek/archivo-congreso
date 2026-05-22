@@ -1,0 +1,71 @@
+================================================================================
+  GUÍA: GESTIÓN DE REGISTROS Y ELIMINACIÓN
+================================================================================
+
+1. ELIMINACIÓN DESDE CONSULTA (RECOMENDADO)
+------------------------------------------
+  Disponible solo para rol admin en el módulo Consulta.
+
+  Pasos:
+    1. Buscar documentos.
+    2. Marcar uno o varios registros (checkbox por fila).
+    3. Opcional: checkbox del encabezado = seleccionar página actual.
+    4. Botón rojo "Eliminar N registro(s)".
+    5. Confirmar en el diálogo del navegador.
+    6. La API elimina y la tabla se recarga.
+
+  Endpoint:
+    POST /api/registros/delete-multiple/{tabla}
+    Body: {"ids": [1, 2, 3]}
+
+
+2. ELIMINACIÓN INDIVIDUAL (API)
+-------------------------------
+  DELETE /api/registros/{tabla}/{id_registro}
+  Solo admin.
+
+
+3. RESPUESTA DE ELIMINACIÓN MÚLTIPLE
+------------------------------------
+  {
+    "deleted_count": 2,
+    "deleted_ids": [1, 2],
+    "failed_ids": [99999],
+    "tabla": "actas_sesiones"
+  }
+
+  failed_ids: IDs que no existían o no pudieron borrarse.
+
+
+4. AUDITORÍA
+------------
+  - Triggers en tablas documentales registran DELETE en registro_operaciones.
+  - La API registra operación DELETE_MULTIPLE por cada ID eliminado.
+  - Consultar en módulo Auditoría (admin).
+
+
+5. CORRECCIÓN CONOCIDA (ERROR 500 TRAS ELIMINAR)
+------------------------------------------------
+  Problema histórico: auditoría dentro del mismo bloque de conexión tras commit.
+  Solución aplicada: registrar auditoría antes de cerrar conexión, con try/except
+  para no fallar la respuesta HTTP si la auditoría falla.
+
+  Si reaparece error tras eliminar:
+    docker-compose restart backend
+
+
+6. PERMISOS
+-----------
+  | Rol       | Eliminar |
+  |-----------|----------|
+  | admin     | Sí       |
+  | operador  | No       |
+  | consulta  | No       |
+
+
+7. NOTAS IMPORTANTES
+--------------------
+  - La eliminación es permanente (no hay papelera).
+  - Los hashes en carga_registros_hash pueden permanecer; un registro
+    reimportado con mismos datos podría tratarse como duplicado.
+  - Para limpiar hashes tras borrado masivo, requiere mantenimiento SQL manual.

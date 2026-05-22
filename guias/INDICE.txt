@@ -1,0 +1,62 @@
+================================================================================
+  ARCHIVO CONGRESO — ÍNDICE DE GUÍAS Y DOCUMENTACIÓN
+================================================================================
+
+Este directorio concentra toda la documentación operativa y técnica del
+proyecto. Los archivos están en formato texto (.txt) para facilitar su lectura
+sin depender de un visor Markdown.
+
+--------------------------------------------------------------------------------
+DOCUMENTACIÓN TÉCNICA (desarrolladores / mantenimiento)
+--------------------------------------------------------------------------------
+
+  DOCUMENTACION_TECNICA.txt
+    Arquitectura, stack, flujos de datos, API, base de datos, seguridad y
+    lógica general del sistema.
+
+--------------------------------------------------------------------------------
+MANUALES OPERATIVOS (usuarios y administradores)
+--------------------------------------------------------------------------------
+
+  01-instalacion-y-ejecucion.txt
+    Requisitos, Docker, ejecución manual, verificación y solución de problemas.
+
+  02-inicio-rapido.txt
+    Arranque en pocos pasos y funciones principales (carga, consulta, eliminar).
+
+  03-manual-de-uso.txt
+    Uso diario: carga masiva Excel, consulta, exportación CSV, roles.
+
+  04-configuracion-y-variables.txt
+    Archivo .env, puertos, proxy del frontend y reinicio de servicios.
+
+  05-migracion-base-de-datos.txt
+    Inicialización, reseteo, volúmenes Docker y scripts SQL.
+
+  06-anadir-nuevo-tipo-documental.txt
+    Alta de tablas en PostgreSQL y tables_config.yaml sin tocar código.
+
+  07-pruebas-y-validacion.txt
+    Checklist de pruebas funcionales, API y regresiones.
+
+  08-validacion-duplicados.txt
+    Sistema de detección de duplicados, reportes Excel y tablas de auditoría.
+
+  09-gestion-registros-eliminacion.txt
+    Eliminación múltiple desde Consulta, permisos y auditoría.
+
+--------------------------------------------------------------------------------
+ACCESO RÁPIDO A LA APLICACIÓN
+--------------------------------------------------------------------------------
+
+  Frontend:     http://localhost:3000
+  API (Swagger): http://localhost:8000/docs
+  PostgreSQL:   localhost:5432
+
+  Usuario por defecto (primera ejecución): admin / admin123
+
+--------------------------------------------------------------------------------
+COMANDO HABITUAL
+--------------------------------------------------------------------------------
+
+  docker-compose up --build

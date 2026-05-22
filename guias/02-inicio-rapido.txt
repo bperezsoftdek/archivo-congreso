@@ -1,0 +1,61 @@
+================================================================================
+  GUÍA: INICIO RÁPIDO
+================================================================================
+
+1. ARRANCAR
+-----------
+  cd Desarrollo_informacion_descripcion
+  docker-compose up --build
+
+  Abrir: http://localhost:3000
+  Iniciar sesión: admin / admin123
+
+
+2. MÓDULOS SEGÚN ROL
+--------------------
+
+  admin     → Registro, Consulta, Auditoría, Usuarios
+  operador  → Registro, Consulta
+  consulta  → Solo Consulta
+
+
+3. CARGA MASIVA (Registro)
+--------------------------
+  1. Elegir tipo documental (ej. Actas de sesiones).
+  2. Subir archivo .xlsx.
+  3. Ver barra de progreso y resumen al finalizar.
+  4. Si hay duplicados, expandir "Ver registros duplicados detectados".
+  5. Descargar reportes Excel si el sistema los genera.
+
+  Formato Excel: primeras 3 filas encabezados agrupados; fila 4 = nombres
+  de columna reales (mapeo por índice en tables_config.yaml).
+
+
+4. CONSULTA
+-----------
+  1. Elegir tipo documental.
+  2. Aplicar filtros opcionales → Buscar.
+  3. Ordenar clicando encabezados de columna.
+  4. Exportar CSV con el botón correspondiente.
+
+
+5. ELIMINAR REGISTROS (solo admin)
+----------------------------------
+  1. Consulta → Buscar.
+  2. Marcar checkboxes en filas deseadas (o "Seleccionar todo").
+  3. Clic en "Eliminar N registro(s)" → Confirmar.
+  4. La tabla se recarga; la operación queda en Auditoría.
+
+
+6. AUDITORÍA (solo admin)
+-------------------------
+  Módulo Auditoría: operaciones INSERT, DELETE, DELETE_MULTIPLE, etc.
+
+
+7. SI ALGO FALLA
+----------------
+  - ¿Eres admin para eliminar? Solo rol admin.
+  - ¿Backend activo? http://localhost:8000/docs
+  - Logs: docker-compose logs -f
+
+  Detalle: 01-instalacion-y-ejecucion.txt y 07-pruebas-y-validacion.txt

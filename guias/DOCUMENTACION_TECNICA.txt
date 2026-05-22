@@ -1,0 +1,392 @@
+================================================================================
+  DOCUMENTACIÓN TÉCNICA — ARCHIVO CONGRESO
+  Sistema de gestión documental archivística
+================================================================================
+
+Versión documentada: estado actual del repositorio
+Stack: React 18 + Vite | FastAPI + Python 3 | PostgreSQL 15 | Docker Compose
+
+
+================================================================================
+1. VISIÓN GENERAL
+================================================================================
+
+Archivo Congreso es una aplicación web de tres capas orientada a:
+
+  - Importación masiva de metadatos archivísticos desde archivos Excel (.xlsx)
+  - Consulta filtrada, ordenamiento y exportación CSV
+  - Control de acceso por roles (admin, operador, consulta)
+  - Detección de duplicados en carga y auditoría de operaciones
+
+El diseño prioriza la configuración declarativa: nuevos tipos documentales se
+añaden vía SQL + tables_config.yaml sin recompilar lógica de negocio en Python
+ni componentes React específicos por tabla.
+
+
+================================================================================
+2. ARQUITECTURA DE DESPLIEGUE
+================================================================================
+
+                    ┌─────────────────────────────────────┐
+                    │         Navegador (usuario)         │
+                    └──────────────────┬──────────────────┘
+                                       │ HTTP :3000
+                    ┌──────────────────▼──────────────────┐
+                    │  frontend (Vite + React)            │
+                    │  Proxy /api → backend:8000          │
+                    └──────────────────┬──────────────────┘
+                                       │
+                    ┌──────────────────▼──────────────────┐
+                    │  backend (FastAPI + Uvicorn)        │
+                    │  Routers: auth, documentos        │
+                    └──────────────────┬──────────────────┘
+                                       │ psycopg2
+                    ┌──────────────────▼──────────────────┐
+                    │  postgres:15-alpine                 │
+                    │  init.sql + volúmenes pgdata/uploads│
+                    └─────────────────────────────────────┘
+
+Archivos clave de orquestación:
+  docker-compose.yml  — Servicios, healthcheck postgres, volúmenes
+  .env                — Credenciales y DATABASE_URL
+
+
+================================================================================
+3. ESTRUCTURA DEL CÓDIGO
+================================================================================
+
+backend/
+  app/
+    main.py                 — FastAPI, CORS, startup ensure_users_table
+    routers/
+      auth.py               — Login, CRUD usuarios
+      documentos.py         — Upload, consulta, export, eliminación, jobs
+    core/
+      config.py             — Carga tables_config.yaml → dict TABLES
+      db.py                 — Context managers get_db / get_cursor
+      excel.py              — Lectura streaming openpyxl por chunks
+      security.py           — Tokens HMAC, PBKDF2, roles, dependencias
+  tables_config.yaml        — Definición de tablas y mapeo Excel
+  requirements.txt
+  Dockerfile
+
+frontend/
+  src/
+    App.jsx                 — Sesión, navegación por módulos, permisos
+    components/
+      LoginPanel.jsx
+      UploadPanel.jsx       — Carga async con polling de job
+      ConsultaPanel.jsx     — Filtros, tabla, eliminación múltiple
+      RegistrosPanel.jsx    — Vista auditoría
+      UsuariosPanel.jsx
+  vite.config.js            — Proxy /api
+  Dockerfile
+
+database/
+  init.sql                  — Esquema, triggers auditoría, datos semilla
+
+
+================================================================================
+4. MODELO DE DATOS
+================================================================================
+
+4.1 Catálogo archivístico
+-------------------------
+  fondo (id_fondo, cod_fondo, desc_fondo)
+  sub_fondo (id_subfondo, cod_subfondo, desc_subfondo, tabla_sql, id_fondo)
+
+  Cada tipo documental tiene una fila en sub_fondo cuyo tabla_sql coincide con
+  el nombre de la tabla PostgreSQL y con la clave en tables_config.yaml.
+
+4.2 Tablas documentales
+-----------------------
+  Una tabla por tipo (ej. actas_sesiones, proyectos_ley, ...).
+  Columnas comunes de enlace:
+    id_* (PK serial), id_fondo, id_subfondo, campos ISAAR/GD según plantilla.
+
+4.3 Auditoría
+-------------
+  registro_operaciones (
+    nombre_tabla, operacion, id_fila_afectada, usuario,
+    fecha_hora, datos_previos JSONB, datos_nuevos JSONB
+  )
+
+  fn_auditoria() — Trigger AFTER INSERT/UPDATE/DELETE en tablas documentales.
+  Durante carga masiva: ALTER TABLE ... DISABLE TRIGGER ALL temporalmente.
+
+4.4 Control de duplicados y cargas
+----------------------------------
+  carga_registros_hash (tabla, row_hash) PK compuesta
+  carga_archivos — historial por tabla + file_hash
+  archivo_cargado, carga_duplicados_bd, carga_duplicados_archivo — trazabilidad
+  extendida y reportes (creadas/actualizadas por lógica en documentos.py)
+
+4.5 Usuarios
+------------
+  usuarios (username UNIQUE, password_hash, rol CHECK admin|operador|consulta)
+  Creada en startup si no existe; usuario semilla admin/admin123.
+
+
+================================================================================
+5. CONFIGURACIÓN DINÁMICA (tables_config.yaml)
+================================================================================
+
+Cargado en config.py al importar el módulo:
+
+  TABLES = load_config()["tables"]
+
+Por cada tabla:
+  pk              — Nombre columna PK para DELETE y consultas
+  label           — Texto en UI
+  subfondo_cod    — Referencia catálogo (informativo)
+  columns         — dict { columna_bd: índice_entero_excel }
+  date_columns    — Columnas parseadas como enteros (fechas año/mes/día)
+
+get_table_config(nombre) lanza KeyError → HTTP 404 en endpoints.
+
+Ventaja: operaciones genéricas construyen SQL dinámico con nombres validados
+desde YAML (no desde input libre del cliente en nombres de tabla).
+
+
+================================================================================
+6. SEGURIDAD Y AUTENTICACIÓN
+================================================================================
+
+Mecanismo: token firmado HMAC-SHA256 (no JWT estándar), formato body.signature.
+
+  create_token(user)  — payload: sub, username, nombre, rol, exp (12h)
+  decode_token()      — Verifica firma y expiración
+  current_user        — Bearer token + consulta usuarios.activo en BD
+  require_roles(...)  — Dependencia FastAPI; 403 si rol no permitido
+
+Contraseñas: PBKDF2-HMAC-SHA256, 120000 iteraciones, formato almacenado:
+  pbkdf2_sha256$salt$hexdigest
+
+Variable TOKEN_SECRET en entorno (default local en security.py).
+
+Frontend: localStorage clave archivo_session { token, user }.
+Cada fetch incluye Authorization: Bearer <token>.
+
+
+================================================================================
+7. API REST — ENDPOINTS PRINCIPALES
+================================================================================
+
+Prefijo auth: /api/auth
+  POST   /login
+  GET    /me
+  GET    /usuarios          (admin)
+  POST   /usuarios          (admin)
+  PUT    /usuarios/{id}     (admin)
+  PATCH  /usuarios/{id}/estado
+  DELETE /usuarios/{id}
+
+Prefijo documentos: /api
+  GET    /tablas
+  POST   /upload/{tabla}              admin, operador — inicia job async
+  GET    /upload/progress/{job_id}    polling estado
+  GET    /consultar/{tabla}           filtros, paginación, orden
+  GET    /exportar/{tabla}            CSV stream
+  GET    /registros                   auditoría global
+  DELETE /registros/{tabla}/{id}      admin
+  POST   /registros/delete-multiple/{tabla}  admin, body {ids:[]}
+  GET    /exports/{filename}          descarga reportes duplicados
+
+
+================================================================================
+8. PROCESO PRINCIPAL: CARGA MASIVA (UPLOAD)
+================================================================================
+
+8.1 Inicio síncrono (endpoint upload)
+--------------------------------------
+  1. Validar tabla en TABLES.
+  2. Leer bytes del UploadFile.
+  3. Calcular SHA256 del archivo.
+  4. Comprobar si mismo hash ya cargado (carga_archivos) → advertencia.
+  5. Crear job_id UUID; estado inicial en dict _jobs (memoria proceso).
+  6. Lanzar thread: threading.Thread(target=_run_upload, ...).
+  7. Responder { job_id } inmediatamente.
+
+8.2 Procesamiento asíncrono (_run_upload)
+-----------------------------------------
+  Fases de estado del job: reading → checking → inserting → done | error
+
+  a) stream_excel_chunks (excel.py)
+     - openpyxl read_only, data_only
+     - Mapeo columnas por índice; ignora filas totalmente vacías
+     - CHUNK_SIZE = 1000 filas por iteración
+     - Adjunta _excel_row a cada registro
+
+  b) Conexión BD única por job:
+     - _ensure_upload_history
+     - _register_file_load → archivo_cargado
+     - _get_catalog_ids → id_fondo, id_subfondo desde sub_fondo
+     - _seed_existing_hashes si tabla ya tenía datos
+     - DISABLE TRIGGER ALL en tabla destino
+     - synchronous_commit OFF (rendimiento)
+
+  c) Por cada chunk:
+     - _apply_catalog_ids
+     - _filter_new_records:
+         * SHA256(json valores columnas)) → row_hash
+         * INSERT hashes nuevos en carga_registros_hash
+         * Separar new_records vs duplicate_records
+     - Inserción bulk: copy_from (TSV en memoria, null=\N)
+     - Si copy_from falla: rollback + INSERT fila a fila con manejo duplicado
+     - Actualizar progreso en _jobs (thread-safe con _jobs_lock)
+
+  d) Finalización:
+     - ENABLE TRIGGER ALL
+     - _save_duplicates_to_db
+     - Generar Excel reportes (_generate_duplicates_report, ...)
+     - _set_job status=done con result JSON
+
+8.3 Detección de duplicados (lógica)
+------------------------------------
+  Hash de fila = SHA256 de JSON compacto de valores en db_cols ordenadas.
+  Un hash solo puede insertarse una vez por tabla en carga_registros_hash.
+  Duplicado en BD: hash no retornado por INSERT ... ON CONFLICT DO NOTHING.
+  Duplicado en archivo: mismo hash aparece más de una vez en el chunk/job;
+  se agrupa en duplicados_archivo con números de fila.
+
+8.4 Cliente (UploadPanel.jsx)
+-----------------------------
+  Poll GET /upload/progress/{job_id} cada ~1s hasta done/error.
+  Renderiza progreso, contadores y <details> con registros_duplicados.
+  Enlaces a archivos_reporte si existen.
+
+
+================================================================================
+9. PROCESO PRINCIPAL: CONSULTA Y EXPORTACIÓN
+================================================================================
+
+GET /consultar/{tabla}
+  - Parámetros query: filtros por columna, page, page_size, sort_by, sort_dir
+  - Construye WHERE dinámico con parámetros enlazados (prevención SQL injection
+    en valores; nombres de columna solo desde config)
+  - COUNT + SELECT paginado
+  - Respuesta: { data, total, page, page_size, columns }
+
+GET /exportar/{tabla}
+  - Mismos filtros sin paginación (o límite alto)
+  - StreamingResponse text/csv
+
+ConsultaPanel.jsx mantiene estado de filtros, orden, selección múltiple y
+llamadas API con token.
+
+
+================================================================================
+10. PROCESO PRINCIPAL: ELIMINACIÓN
+================================================================================
+
+DELETE /registros/{tabla}/{id}
+  - DELETE SQL por pk de config
+  - Trigger auditoría en BD
+
+POST /registros/delete-multiple/{tabla}
+  - Body: { "ids": [ ... ] }
+  - Bucle DELETE por id; acumula deleted_ids / failed_ids
+  - Registro manual en registro_operaciones (DELETE_MULTIPLE)
+  - Auditoría con try/except para no romper respuesta HTTP 200
+
+ConsultaPanel solo muestra UI de eliminación si isAdmin === true.
+
+
+================================================================================
+11. CAPA DE ACCESO A DATOS (db.py)
+================================================================================
+
+  get_db():
+    - psycopg2.connect(DATABASE_URL)
+    - statement_timeout=600000 ms (10 min)
+    - commit al salir OK; rollback en excepción; siempre close
+
+  get_cursor(conn):
+    - RealDictCursor → filas como dict
+
+No hay ORM; SQL explícito en routers. Inserción masiva optimizada con copy_from.
+
+
+================================================================================
+12. FRONTEND — LÓGICA GENERAL
+================================================================================
+
+App.jsx:
+  - Sin token → LoginPanel
+  - Con token → carga GET /api/tablas
+  - Módulos filtrados por rol (canUpload, isAdmin)
+  - Proxy desarrollo: peticiones /api → backend Docker
+
+Componentes desacoplados por función; no hay router React Router — estado tab
+local controla qué panel se monta.
+
+Estilos: index.css clases (.app-shell, .sidebar, tablas, etc.).
+
+
+================================================================================
+13. CONCURRENCIA Y ESTADO
+================================================================================
+
+  _jobs: dict en memoria del proceso Uvicorn.
+  Implicación: si hay múltiples workers o reinicio, jobs en curso se pierden.
+  Entorno actual: un worker con --reload en desarrollo.
+
+  Threads de upload comparten conexiones BD independientes por job.
+
+  _jobs_lock: protege actualizaciones de progreso.
+
+
+================================================================================
+14. RENDIMIENTO Y OPTIMIZACIONES
+================================================================================
+
+  - Lectura Excel streaming (no cargar libro completo en RAM)
+  - copy_from PostgreSQL por chunk
+  - synchronous_commit OFF durante bulk
+  - Triggers deshabilitados en carga (re-habilitados en finally)
+  - Timeout proxy y keep-alive extendidos (600s) para archivos grandes
+
+
+================================================================================
+15. PUNTOS DE EXTENSIÓN
+================================================================================
+
+  Nuevo tipo documental:
+    init.sql + sub_fondo + tables_config.yaml + restart backend
+
+  Nuevo rol:
+    Ampliar ROLES en security.py, CHECK en usuarios, lógica App.jsx y
+    dependencias require_roles en endpoints.
+
+  Nuevo campo en tipo existente:
+    ALTER TABLE + índice en YAML columns + posible migración hashes
+
+
+================================================================================
+16. DEPENDENCIAS PRINCIPALES
+================================================================================
+
+Backend (requirements.txt):
+  fastapi, uvicorn, psycopg2-binary, openpyxl, pyyaml, python-multipart
+
+Frontend (package.json):
+  react, react-dom, vite, @vitejs/plugin-react
+
+
+================================================================================
+17. REFERENCIA RÁPIDA DE ARCHIVOS CRÍTICOS
+================================================================================
+
+  Lógica upload/consulta/delete  → backend/app/routers/documentos.py
+  Mapeo Excel                    → backend/app/core/excel.py
+  Config tablas                  → backend/tables_config.yaml
+  Auth y tokens                  → backend/app/core/security.py
+  Esquema BD inicial             → database/init.sql
+  Shell UI y permisos            → frontend/src/App.jsx
+
+
+================================================================================
+FIN DE DOCUMENTACIÓN TÉCNICA
+================================================================================
+
+Para procedimientos operativos ver el resto de archivos en la carpeta guias/.

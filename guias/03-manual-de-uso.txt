@@ -1,0 +1,86 @@
+================================================================================
+  MANUAL DE USO — ARCHIVO CONGRESO
+================================================================================
+
+1. DESCRIPCIÓN
+--------------
+  Aplicación web para carga masiva y consulta de documentos archivísticos del
+  Congreso. Permite importar metadatos desde Excel, consultar con filtros,
+  exportar resultados y auditar operaciones.
+
+
+2. INICIO DE SESIÓN
+-------------------
+  Credenciales según usuario creado por el administrador.
+  La sesión se guarda en el navegador (localStorage: archivo_session).
+  Token válido 12 horas.
+
+
+3. CARGA MASIVA
+---------------
+  Ruta en la app: Módulo "Registro" (roles admin u operador).
+
+  Pasos:
+    a) Seleccionar tipo documental de la lista (proviene de tables_config.yaml).
+    b) Arrastrar o elegir archivo .xlsx / .xls.
+    c) Pulsar "Subir archivo".
+    d) Seguir el progreso: lectura → verificación duplicados → inserción.
+    e) Revisar resumen: insertados, duplicados en BD, duplicados en archivo,
+       errores y columnas no encontradas.
+
+  Reglas del Excel:
+    - Hoja activa del libro.
+    - Columnas mapeadas por posición (índice 0-based) según configuración.
+    - Filas totalmente vacías se omiten.
+    - Valores N/A o N/D se conservan como texto.
+
+  Duplicados:
+    - No detienen la carga: se insertan los registros nuevos.
+    - Duplicados respecto a BD o repetidos en el mismo archivo se omiten.
+    - Detalle en 08-validacion-duplicados.txt.
+
+
+4. CONSULTA
+-----------
+  Ruta: Módulo "Consulta" (todos los roles autenticados).
+
+  Funciones:
+    - Filtros por campos configurados para la tabla.
+    - Paginación y ordenamiento por columna.
+    - Exportación a CSV de los resultados filtrados.
+    - Eliminación múltiple (solo administradores): checkboxes + confirmación.
+
+
+5. AUDITORÍA
+------------
+  Ruta: Módulo "Auditoría" (solo admin).
+
+  Muestra registro_operaciones: tabla, operación, ID afectado, usuario, fecha.
+  Los triggers de PostgreSQL registran INSERT/UPDATE/DELETE en tablas
+  documentales; las eliminaciones masivas desde la API también se registran.
+
+
+6. USUARIOS
+-----------
+  Ruta: Módulo "Usuarios" (solo admin).
+
+  Crear, editar, activar/desactivar y eliminar usuarios.
+  Roles: admin, operador, consulta.
+
+
+7. PERMISOS POR ROL
+-------------------
+
+  | Acción              | admin | operador | consulta |
+  |---------------------|-------|----------|----------|
+  | Cargar Excel        |  Sí   |   Sí     |   No     |
+  | Consultar / exportar|  Sí   |   Sí     |   Sí     |
+  | Eliminar registros  |  Sí   |   No     |   No     |
+  | Auditoría           |  Sí   |   No     |   No     |
+  | Gestión usuarios    |  Sí   |   No     |   No     |
+
+
+8. EXPORTAR CSV
+---------------
+  Desde Consulta, tras ejecutar una búsqueda, usar "Exportar CSV".
+  El archivo refleja filtros y columnas visibles de la consulta actual.

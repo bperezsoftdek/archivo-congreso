@@ -1,0 +1,75 @@
+================================================================================
+  GUÍA: VALIDACIÓN DE DUPLICADOS EN CARGA MASIVA
+================================================================================
+
+1. OBJETIVO
+-----------
+  Evitar insertar registros ya existentes o repetidos en el mismo Excel, sin
+  detener la carga de los registros válidos.
+
+
+2. NIVELES DE DETECCIÓN
+-----------------------
+
+  A) Duplicado por contenido de archivo (mismo hash SHA256 del .xlsx)
+     Tabla: carga_archivos / archivo_cargado
+     El sistema puede advertir si el mismo archivo ya se cargó.
+
+  B) Duplicado por registro respecto a la base de datos
+     Hash SHA256 de los valores de columnas (JSON ordenado).
+     Tabla: carga_registros_hash (tabla + row_hash UNIQUE).
+     Si el hash ya existe, el registro se omite y se lista como duplicado BD.
+
+  C) Duplicado dentro del mismo Excel
+     Misma fila lógica repetida en el archivo → duplicados_archivo.
+     Se registran fila original y fila duplicada.
+
+
+3. FLUJO EN LA INTERFAZ
+-----------------------
+  1. Usuario sube Excel en Registro.
+  2. Progreso: reading → checking → inserting → done.
+  3. Resumen muestra insertadas, duplicados_bd, duplicados_archivo, errores.
+  4. Sección expandible con hasta 500 registros duplicados (vista previa).
+  5. Botones para descargar:
+       - duplicados_bd.xlsx
+       - duplicados_archivo.xlsx
+     (generados en backend/uploads o ruta de exports)
+
+
+4. TABLAS RELACIONADAS (ESQUEMA AVANZADO)
+-----------------------------------------
+  archivo_cargado          — Metadatos de cada archivo subido
+  carga_duplicados_bd      — Detalle filas ya en BD
+  carga_duplicados_archivo — Repeticiones dentro del Excel
+  carga_registros_hash     — Índice de hashes insertados por tabla
+
+
+5. ALGORITMO RESUMIDO (_filter_new_records)
+-------------------------------------------
+  1. Calcular _row_hash por registro.
+  2. Cargar hashes en tabla temporal tmp_upload_hashes.
+  3. INSERT en carga_registros_hash ... ON CONFLICT DO NOTHING RETURNING.
+  4. Hashes que retornan = nuevos; el resto = duplicados.
+  5. Solo insertar new_records vía COPY o INSERT por fila.
+
+
+6. PRIMERA CARGA EN TABLA CON DATOS HISTÓRICOS
+----------------------------------------------
+  _seed_existing_hashes() lee filas existentes y puebla carga_registros_hash
+  para que futuras cargas no dupliquen contenido ya almacenado.
+
+
+7. TRANSACCIONALIDAD
+--------------------
+  Por chunk (1000 filas): commit tras insertar o rollback e intento fila a fila.
+  Triggers de auditoría deshabilitados durante bulk insert por rendimiento.
+
+
+8. PRUEBAS SUGERIDAS
+--------------------
+  - Subir mismo Excel dos veces → segunda carga casi todo duplicado BD.
+  - Excel con filas idénticas internas → duplicados_archivo > 0.
+  - Verificar descarga de reportes y contadores en UI.
+
+  API: ver 07-pruebas-y-validacion.txt sección upload/progress.
