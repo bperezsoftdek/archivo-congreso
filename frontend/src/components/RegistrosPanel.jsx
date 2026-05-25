@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
+import { formatApiError } from '../utils/api'
 
-const API = '/api'
+import { API_BASE } from '../utils/api'
 
-const OPERACIONES = ['', 'INSERT', 'UPDATE', 'DELETE']
+const OPERACIONES = ['', 'INSERT', 'UPDATE', 'DELETE', 'DELETE_MULTIPLE']
 
 export default function RegistrosPanel({ token }) {
   const [filters, setFilters] = useState({})
@@ -21,11 +22,11 @@ export default function RegistrosPanel({ token }) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`${API}/registros?${buildQuery(p)}`, {
+      const res = await fetch(`${API_BASE}/registros?${buildQuery(p)}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       const body = await res.json()
-      if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`)
+      if (!res.ok) throw new Error(formatApiError(body, `HTTP ${res.status}`))
       setData(body)
       setPage(p)
     } catch (e) {
@@ -41,7 +42,7 @@ export default function RegistrosPanel({ token }) {
 
   return (
     <div className="card">
-      <h2>Consulta de registros</h2>
+      <h2>Auditoria de operaciones</h2>
 
       <div className="filters">
         <label>

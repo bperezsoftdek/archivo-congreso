@@ -27,6 +27,7 @@ button.btn.danger { background: #b42318; }
 .progress-bar div { height: 100%; background: #1a3a5c; transition: width 0.3s; }
 .result-box { background: #f0f4f8; border-radius: 6px; padding: 1rem; font-size: 0.85rem; margin-top: 0.8rem; }
 .result-box.error { background: #fff0f0; }
+.result-box.success { background: #f0fff4; border: 1px solid #9ae6b4; }
 table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
 th { background: #1a3a5c; color: white; padding: 0.5rem; text-align: left; }
 td { padding: 0.45rem 0.5rem; border-bottom: 1px solid #eee; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-const API = '/api'
+import { API_BASE } from '../utils/api'
 
 export default function DeletePanel({ tablas, token }) {
   const [tabla, setTabla] = useState('')
@@ -16,7 +16,7 @@ export default function DeletePanel({ tablas, token }) {
     setMessage(null)
     setError(null)
     try {
-      const res = await fetch(`${API}/registros/${tabla}/${id}`, {
+      const res = await fetch(`${API_BASE}/registros/${tabla}/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })

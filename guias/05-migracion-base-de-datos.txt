@@ -17,17 +17,36 @@
   El volumen pgdata persiste los datos entre reinicios.
 
 
-2. RESETEAR BASE DE DATOS (DESARROLLO / TESTING)
+2. PERSISTENCIA AL REINICIAR SERVICIOS
+------------------------------------
+  Los datos de PostgreSQL se guardan en el volumen Docker:
+    archivo_congreso_pgdata
+
+  Comandos que CONSERVAN los datos:
+    docker-compose stop
+    docker-compose start
+    docker-compose restart
+    docker-compose up
+    docker-compose up --build
+
+  Comando que BORRA los datos (evitar en producción):
+    docker-compose down -v
+    El flag -v elimina los volúmenes nombrados.
+
+  El proyecto usa nombre fijo "archivo-congreso" en docker-compose.yml para
+  que el volumen no cambie si renombras la carpeta del proyecto.
+
+3. RESETEAR BASE DE DATOS (DESARROLLO / TESTING)
 ------------------------------------------------
   ADVERTENCIA: Borra todos los datos.
 
     docker-compose down -v
     docker-compose up --build
 
-  El flag -v elimina el volumen pgdata. init.sql se vuelve a ejecutar.
+  init.sql solo se ejecuta la primera vez que el volumen pgdata está vacío.
 
 
-3. MIGRACIÓN SIN DOCKER
+4. MIGRACIÓN SIN DOCKER
 -----------------------
   1. Instalar PostgreSQL 15+.
   2. Crear base archivo_congreso y usuario con permisos.
@@ -37,7 +56,7 @@
   5. Iniciar backend; ensure_users_table() crea tabla usuarios y admin.
 
 
-4. AÑADIR TABLAS NUEVAS A UNA BD EXISTENTE
+5. AÑADIR TABLAS NUEVAS A UNA BD EXISTENTE
 ------------------------------------------
   Opción A — Editar init.sql y recrear volumen (solo si puede perder datos).
   Opción B — Ejecutar SQL manualmente en producción:
@@ -48,7 +67,7 @@
     docker-compose restart backend.
 
 
-5. TABLAS DE SOPORTE DE CARGA (CREADAS EN RUNTIME)
+6. TABLAS DE SOPORTE DE CARGA (CREADAS EN RUNTIME)
 --------------------------------------------------
   El backend puede crear si no existen:
     - carga_archivos
@@ -58,14 +77,14 @@
       (según implementación en documentos.py e init.sql)
 
 
-6. SEMILLA DE HASHES PARA TABLAS CON DATOS PREVIOS
+7. SEMILLA DE HASHES PARA TABLAS CON DATOS PREVIOS
 --------------------------------------------------
   En la primera carga a una tabla que ya tiene filas, _seed_existing_hashes()
   rellena carga_registros_hash desde los datos existentes para detectar
   duplicados correctamente.
 
 
-7. BACKUP RECOMENDADO (PRODUCCIÓN)
+8. BACKUP RECOMENDADO (PRODUCCIÓN)
 ----------------------------------
   Antes de migraciones:
 
@@ -77,7 +96,7 @@
     psql -U congreso -d archivo_congreso < backup_YYYYMMDD.sql
 
 
-8. AUDITORÍA Y TRIGGERS
+9. AUDITORÍA Y TRIGGERS
 -----------------------
   Cada tabla documental puede tener trigger que llama fn_auditoria.
   Durante carga masiva los triggers se deshabilitan temporalmente

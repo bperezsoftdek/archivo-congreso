@@ -140,6 +140,7 @@ def _filter_new_records(conn, tabla: str, records: list, db_cols: list) -> tuple
         else:
             # Este es un duplicado
             dup = {col: record.get(col) for col in db_cols if col not in ["id_fondo", "id_subfondo", "_row_hash", "_excel_row"]}
+            dup["_row_hash"] = row_hash
             if "_excel_row" in record:
                 dup["_excel_row"] = record["_excel_row"]
             duplicate_records.append(dup)
@@ -434,13 +435,23 @@ def _generate_file_duplicates_report(conn, id_archivo: int, tabla: str) -> str:
     return filepath, filename
 
 
-def _run_upload(job_id: str, tabla: str, content: bytes, cfg: dict):
+def _count_duplicados_archivo(duplicados_archivo: dict) -> int:
+    """Cuenta filas repetidas dentro del Excel (excluye la primera aparición de cada hash)."""
+    return sum(max(0, len(filas) - 1) for filas in duplicados_archivo.values())
+
+
+def _run_upload(
+    job_id: str,
+    tabla: str,
+    content: bytes,
+    cfg: dict,
+    nombre_archivo: str,
+    usuario: str,
+):
     col_map = cfg["columns"]
     date_cols = cfg.get("date_columns", [])
     
-    # Calcular hash del archivo
     file_hash = _calculate_file_hash(content)
-    filename = job_id  # Usamos job_id como referencia; el nombre real viene del endpoint
 
     _set_job(job_id, status="reading", progress=0)
     try:
@@ -470,7 +481,7 @@ def _run_upload(job_id: str, tabla: str, content: bytes, cfg: dict):
             
             # Registrar archivo en la nueva tabla
             try:
-                id_archivo = _register_file_load(conn, filename, file_hash, tabla, "system", total_rows)
+                id_archivo = _register_file_load(conn, nombre_archivo, file_hash, tabla, usuario, total_rows)
             except Exception as e:
                 _set_job(job_id, status="warning", message=f"No se pudo registrar archivo: {e}")
             
@@ -588,14 +599,14 @@ def _run_upload(job_id: str, tabla: str, content: bytes, cfg: dict):
             if id_archivo and duplicados_bd:
                 filepath_bd, filename_bd = _generate_duplicates_report(conn, id_archivo, tabla)
                 archivos_reporte['duplicados_bd'] = {
-                    'url': f'/documentos/exports/{filename_bd}',
+                    'url': f'/api/exports/{filename_bd}',
                     'filename': filename_bd
                 }
             
             if id_archivo and duplicados_archivo:
                 filepath_archivo, filename_archivo = _generate_file_duplicates_report(conn, id_archivo, tabla)
                 archivos_reporte['duplicados_archivo'] = {
-                    'url': f'/documentos/exports/{filename_archivo}',
+                    'url': f'/api/exports/{filename_archivo}',
                     'filename': filename_archivo
                 }
     except Exception as e:
@@ -608,7 +619,7 @@ def _run_upload(job_id: str, tabla: str, content: bytes, cfg: dict):
             "total_filas_excel": total_rows,
             "insertadas": inserted,
             "duplicados_bd": len(duplicados_bd),
-            "duplicados_archivo": len(duplicados_archivo),
+            "duplicados_archivo": _count_duplicados_archivo(duplicados_archivo),
             "errores": len(errors),
             "columnas_no_encontradas": missing_cols,
             "detalle_errores": errors[:100],
@@ -693,7 +704,11 @@ async def upload(tabla: str, file: UploadFile = File(...), user: dict = Depends(
             "warnings": warnings
         }
 
-    t = threading.Thread(target=_run_upload, args=(job_id, tabla, content, cfg), daemon=True)
+    t = threading.Thread(
+        target=_run_upload,
+        args=(job_id, tabla, content, cfg, file.filename or "archivo.xlsx", user["username"]),
+        daemon=True,
+    )
     t.start()
 
     return {"job_id": job_id, "warnings": warnings}
@@ -749,6 +764,8 @@ def eliminar_multiples(tabla: str, request_body: dict = Body(...), user: dict = 
     ids = request_body.get("ids", [])
     if not ids:
         raise HTTPException(status_code=400, detail="Se requiere lista de IDs a eliminar en campo 'ids'")
+    if not all(isinstance(i, int) for i in ids):
+        raise HTTPException(status_code=400, detail="Todos los IDs deben ser números enteros")
     
     try:
         cfg = get_table_config(tabla)
@@ -789,11 +806,16 @@ def eliminar_multiples(tabla: str, request_body: dict = Body(...), user: dict = 
             # Log pero no falles si la auditoría falla
             pass
 
+    message = f"{len(deleted_ids)} registro(s) eliminado(s)"
+    if failed_ids:
+        message += f"; {len(failed_ids)} no encontrado(s) o con error"
+
     return {
         "deleted_count": len(deleted_ids),
         "deleted_ids": deleted_ids,
         "failed_ids": failed_ids,
-        "tabla": tabla
+        "tabla": tabla,
+        "message": message,
     }
 
 
@@ -896,7 +918,13 @@ def consultar(
             )
             rows = cur.fetchall()
 
-    return {"total": total, "page": page, "limit": limit, "data": [dict(r) for r in rows]}
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pk": cfg["pk"],
+        "data": [dict(r) for r in rows],
+    }
 
 
 @router.get("/exportar/{tabla}")

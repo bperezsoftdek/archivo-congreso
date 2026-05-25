@@ -23,7 +23,8 @@
 -----------------
   - postgres: monta database/init.sql en /docker-entrypoint-initdb.d/
   - backend:  puerto 8000, volumen ./backend, volumen uploads
-  - frontend: puerto 3000, VITE_API_URL=http://localhost:8000
+  - frontend: puerto 3000
+      VITE_API_URL       — vacío = /api por proxy Vite; en despliegue use URL .../api
 
   Tras cambiar .env:
     docker-compose down

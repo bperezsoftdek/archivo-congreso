@@ -1,6 +1,10 @@
+# Nombre fijo del proyecto: evita volúmenes distintos al renombrar la carpeta.
+name: archivo-congreso
+
 services:
   postgres:
     image: postgres:15-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -8,8 +12,9 @@ services:
     ports:
       - "5432:5432"
     volumes:
+      # Volumen nombrado explícito: los datos sobreviven a restart/stop (no usar down -v).
       - pgdata:/var/lib/postgresql/data
-      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -18,6 +23,7 @@ services:
 
   backend:
     build: ./backend
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
@@ -25,6 +31,7 @@ services:
     volumes:
       - ./backend:/app
       - uploads:/app/uploads
+      - exports_data:/app/exports
     depends_on:
       postgres:
         condition: service_healthy
@@ -32,6 +39,7 @@ services:
 
   frontend:
     build: ./frontend
+    restart: unless-stopped
     ports:
       - "3000:3000"
     volumes:
@@ -39,8 +47,14 @@ services:
     depends_on:
       - backend
     environment:
-      - VITE_API_URL=http://localhost:8000
+      # En despliegue externo, usar URL pública del backend (terminando en /api).
+      # En local puede quedar vacío y usar proxy de Vite.
+      - VITE_API_URL=${VITE_API_URL:-}
 
 volumes:
   pgdata:
+    name: archivo_congreso_pgdata
   uploads:
+    name: archivo_congreso_uploads
+  exports_data:
+    name: archivo_congreso_exports

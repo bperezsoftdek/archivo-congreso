@@ -1,6 +1,5 @@
 import { useState } from 'react'
-
-const API = '/api/auth'
+import { API_AUTH, formatApiError } from '../utils/api'
 
 export default function LoginPanel({ onLogin }) {
   const [username, setUsername] = useState('admin')
@@ -13,13 +12,13 @@ export default function LoginPanel({ onLogin }) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`${API}/login`, {
+      const res = await fetch(`${API_AUTH}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
       })
       const body = await res.json()
-      if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`)
+      if (!res.ok) throw new Error(formatApiError(body, `HTTP ${res.status}`))
       onLogin(body)
     } catch (e) {
       setError(e.message)

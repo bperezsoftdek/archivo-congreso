@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-
-const API = '/api/auth'
+import { API_AUTH, formatApiError } from '../utils/api'
 
 const EMPTY_FORM = { username: '', nombre: '', password: '', rol: 'operador', activo: true }
 
@@ -21,9 +20,9 @@ export default function UsuariosPanel({ token }) {
   const isEditing = editingId !== null
 
   const loadUsers = useCallback(async () => {
-    const res = await fetch(`${API}/usuarios`, { headers: authHeaders })
+    const res = await fetch(`${API_AUTH}/usuarios`, { headers: authHeaders })
     const body = await res.json()
-    if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`)
+    if (!res.ok) throw new Error(formatApiError(body, `HTTP ${res.status}`))
     setUsers(body)
   }, [token])
 
@@ -39,7 +38,7 @@ export default function UsuariosPanel({ token }) {
     setError(null)
     setMessage(null)
     try {
-      const url = isEditing ? `${API}/usuarios/${editingId}` : `${API}/usuarios`
+      const url = isEditing ? `${API_AUTH}/usuarios/${editingId}` : `${API_AUTH}/usuarios`
       const method = isEditing ? 'PUT' : 'POST'
       const payload = isEditing && !form.password ? { ...form, password: null } : form
       const res = await fetch(url, {
@@ -48,7 +47,7 @@ export default function UsuariosPanel({ token }) {
         body: JSON.stringify(payload),
       })
       const body = await res.json()
-      if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`)
+      if (!res.ok) throw new Error(formatApiError(body, `HTTP ${res.status}`))
       setMessage(isEditing ? 'Usuario actualizado' : 'Usuario creado')
       resetForm()
       await loadUsers()
@@ -74,12 +73,12 @@ export default function UsuariosPanel({ token }) {
     setError(null)
     setMessage(null)
     try {
-      const res = await fetch(`${API}/usuarios/${user.id_usuario}/estado?activo=${!user.activo}`, {
+      const res = await fetch(`${API_AUTH}/usuarios/${user.id_usuario}/estado?activo=${!user.activo}`, {
         method: 'PATCH',
         headers: authHeaders,
       })
       const body = await res.json()
-      if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`)
+      if (!res.ok) throw new Error(formatApiError(body, `HTTP ${res.status}`))
       setMessage(user.activo ? 'Usuario desactivado' : 'Usuario activado')
       await loadUsers()
     } catch (e) {
@@ -92,12 +91,12 @@ export default function UsuariosPanel({ token }) {
     setError(null)
     setMessage(null)
     try {
-      const res = await fetch(`${API}/usuarios/${user.id_usuario}`, {
+      const res = await fetch(`${API_AUTH}/usuarios/${user.id_usuario}`, {
         method: 'DELETE',
         headers: authHeaders,
       })
       const body = await res.json()
-      if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`)
+      if (!res.ok) throw new Error(formatApiError(body, `HTTP ${res.status}`))
       setMessage('Usuario eliminado')
       if (editingId === user.id_usuario) resetForm()
       await loadUsers()

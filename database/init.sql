@@ -202,3 +202,30 @@ CREATE TABLE IF NOT EXISTS carga_duplicados_archivo (
 
 CREATE INDEX IF NOT EXISTS idx_dup_archivo_id ON carga_duplicados_archivo (id_archivo);
 CREATE INDEX IF NOT EXISTS idx_dup_archivo_hash ON carga_duplicados_archivo (hash_registro);
+
+-- ============================================================
+-- HISTORIAL DE CARGAS Y HASHES (persistencia desde el inicio)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS carga_archivos (
+    id_carga SERIAL PRIMARY KEY,
+    tabla TEXT NOT NULL,
+    nombre_archivo TEXT NOT NULL,
+    file_hash TEXT NOT NULL,
+    file_size BIGINT NOT NULL DEFAULT 0,
+    job_id UUID,
+    estado TEXT NOT NULL DEFAULT 'processing',
+    filas_insertadas INT DEFAULT 0,
+    errores INT DEFAULT 0,
+    fecha_carga TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (tabla, file_hash)
+);
+
+CREATE TABLE IF NOT EXISTS carga_registros_hash (
+    tabla TEXT NOT NULL,
+    row_hash TEXT NOT NULL,
+    fecha_registro TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (tabla, row_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_carga_archivos_tabla ON carga_archivos (tabla);
+CREATE INDEX IF NOT EXISTS idx_carga_hash_tabla ON carga_registros_hash (tabla);

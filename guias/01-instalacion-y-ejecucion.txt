@@ -128,6 +128,12 @@
     Comprobar backend: curl http://localhost:8000/docs
     docker-compose restart backend
 
+  Despliegue externo (dominio público):
+    Definir en .env:
+      VITE_API_URL=https://api.tu-dominio.com/api
+    Luego reconstruir frontend:
+      docker-compose up --build -d frontend
+
   npm install falla:
     npm cache clean --force
     npm install
@@ -138,7 +144,8 @@
 
   docker-compose stop
   docker-compose down
-  docker-compose down -v          (borra volúmenes y datos)
+  docker-compose down -v          (BORRA TODOS LOS DATOS — no usar para reiniciar)
+  docker-compose restart          (reinicia sin perder datos)
   docker-compose logs -f backend
   docker-compose restart backend
 

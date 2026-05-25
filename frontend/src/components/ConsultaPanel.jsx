@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
+import { formatApiError } from '../utils/api'
 
-const API = '/api'
+import { API_BASE } from '../utils/api'
 
 const FILTERS = [
   { key: 'codigo_referencia', label: 'Codigo de referencia' },
@@ -38,28 +39,29 @@ export default function ConsultaPanel({ tablas, token, isAdmin }) {
     setError(null)
     setSelected(new Set())
     try {
-      const res = await fetch(`${API}/consultar/${tabla}?${buildQuery(p)}`, { headers: authHeaders })
+      const res = await fetch(`${API_BASE}/consultar/${tabla}?${buildQuery(p)}`, { headers: authHeaders })
       const body = await res.json()
-      if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`)
+      if (!res.ok) throw new Error(formatApiError(body, `HTTP ${res.status}`))
       setData(body)
       setPage(p)
     } catch (e) {
       setError(e.message)
+      setData(null)
     } finally {
       setLoading(false)
     }
   }, [tabla, buildQuery, token])
 
-  useEffect(() => { if (tabla) fetchData(1) }, [tabla])
+  useEffect(() => { if (tabla) fetchData(1) }, [tabla, sort, order])
 
   const handleExport = async () => {
     if (!tabla) return
     const params = new URLSearchParams()
     Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v) })
-    const res = await fetch(`${API}/exportar/${tabla}?${params}`, { headers: authHeaders })
+    const res = await fetch(`${API_BASE}/exportar/${tabla}?${params}`, { headers: authHeaders })
     if (!res.ok) {
       const body = await res.json()
-      setError(body.detail || `HTTP ${res.status}`)
+      setError(formatApiError(body, `HTTP ${res.status}`))
       return
     }
     const blob = await res.blob()
@@ -82,6 +84,7 @@ export default function ConsultaPanel({ tablas, token, isAdmin }) {
   }
 
   const selectAll = () => {
+    if (!data?.data?.length) return
     if (selected.size === data.data.length) {
       setSelected(new Set())
     } else {
@@ -98,10 +101,10 @@ export default function ConsultaPanel({ tablas, token, isAdmin }) {
     setDeleteMessage(null)
 
     try {
-      const pkCol = Object.keys(data.data[0])[0]
+      const pkCol = data.pk || Object.keys(data.data[0])[0]
       const idsToDelete = Array.from(selected).map(idx => data.data[idx][pkCol])
       
-      const res = await fetch(`${API}/registros/delete-multiple/${tabla}`, {
+      const res = await fetch(`${API_BASE}/registros/delete-multiple/${tabla}`, {
         method: 'POST',
         headers: { 
           ...authHeaders,
@@ -110,9 +113,12 @@ export default function ConsultaPanel({ tablas, token, isAdmin }) {
         body: JSON.stringify({ ids: idsToDelete }),
       })
       const body = await res.json()
-      if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`)
+      if (!res.ok) throw new Error(formatApiError(body, `HTTP ${res.status}`))
       
-      setDeleteMessage(`${body.deleted_count} registro(s) eliminado(s) exitosamente`)
+      setDeleteMessage(body.message || `${body.deleted_count} registro(s) eliminado(s) exitosamente`)
+      if (body.failed_ids?.length > 0) {
+        setError(`No se pudieron eliminar ${body.failed_ids.length} ID(s): ${body.failed_ids.join(', ')}`)
+      }
       setSelected(new Set())
       await fetchData(page)
     } catch (e) {
@@ -160,7 +166,7 @@ export default function ConsultaPanel({ tablas, token, isAdmin }) {
       </div>
 
       {error && <div className="result-box error">{error}</div>}
-      {deleteMessage && <div className="result-box">{deleteMessage}</div>}
+      {deleteMessage && <div className="result-box success">{deleteMessage}</div>}
 
       {data && (
         <>

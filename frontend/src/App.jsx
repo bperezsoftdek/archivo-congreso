@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { API_BASE } from './utils/api'
 import UploadPanel from './components/UploadPanel'
 import ConsultaPanel from './components/ConsultaPanel'
 import RegistrosPanel from './components/RegistrosPanel'
@@ -32,7 +33,7 @@ export default function App() {
 
   useEffect(() => {
     if (!token) return
-    fetch('/api/tablas', { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${API_BASE}/tablas`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
       .then(setTablas)
       .catch(e => setApiError(`No se pudo conectar al backend: ${e.message}`))
