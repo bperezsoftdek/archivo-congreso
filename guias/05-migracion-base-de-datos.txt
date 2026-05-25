@@ -99,5 +99,19 @@
 9. AUDITORÍA Y TRIGGERS
 -----------------------
   Cada tabla documental puede tener trigger que llama fn_auditoria.
-  Durante carga masiva los triggers se deshabilitan temporalmente
-  (DISABLE TRIGGER ALL) y se reactivan al finalizar el job.
+  El usuario registrado es el de la aplicación (JWT), vía variable de
+  sesión app.audit_user, no el rol PostgreSQL.
+
+  Durante carga masiva los triggers permanecen activos: cada INSERT
+  queda en registro_operaciones con el username del operador.
+
+  Migración en BD existente:
+    psql -U congreso -d archivo_congreso -f database/migrations/001_auditoria_archivos_fondo.sql
+
+
+10. ARCHIVOS CARGADOS Y REVERSIÓN
+---------------------------------
+  archivo_cargado guarda nombre, ruta, hash, usuario y fecha.
+  carga_archivo_registro vincula cada fila insertada (id_registro + hash).
+  El módulo Registro → «Archivos cargados» permite revertir una carga
+  (conteo previo + confirmación escribiendo el nombre del archivo).

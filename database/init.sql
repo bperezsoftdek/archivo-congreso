@@ -114,7 +114,13 @@ DECLARE
     v_id  INT;
     v_prev JSONB;
     v_new  JSONB;
+    v_usuario TEXT;
 BEGIN
+    v_usuario := NULLIF(trim(current_setting('app.audit_user', true)), '');
+    IF v_usuario IS NULL THEN
+        v_usuario := current_user;
+    END IF;
+
     IF TG_OP = 'DELETE' THEN
         EXECUTE format('SELECT ($1).%I', TG_ARGV[0]) INTO v_id USING OLD;
         v_prev := row_to_json(OLD)::JSONB;
@@ -130,7 +136,7 @@ BEGIN
     END IF;
 
     INSERT INTO registro_operaciones(nombre_tabla, operacion, id_fila_afectada, usuario, datos_previos, datos_nuevos)
-    VALUES (TG_TABLE_NAME, TG_OP, v_id, current_user, v_prev, v_new);
+    VALUES (TG_TABLE_NAME, TG_OP, v_id, v_usuario, v_prev, v_new);
 
     IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
 END;
@@ -158,16 +164,50 @@ CREATE INDEX IF NOT EXISTS idx_actas_kw        ON actas_sesiones USING gin(to_ts
 CREATE TABLE IF NOT EXISTS archivo_cargado (
     id_archivo SERIAL PRIMARY KEY,
     nombre_archivo VARCHAR(500) NOT NULL,
+    ruta_archivo TEXT,
     hash_archivo VARCHAR(256) NOT NULL UNIQUE,
     tabla_destino VARCHAR(100),
     fecha_carga TIMESTAMPTZ DEFAULT NOW(),
     usuario_carga VARCHAR(200),
-    cantidad_registros INT,
-    estado VARCHAR(50) DEFAULT 'pending'
+    cantidad_registros INT DEFAULT 0,
+    registros_vinculados INT DEFAULT 0,
+    registros_eliminados INT DEFAULT 0,
+    estado VARCHAR(50) DEFAULT 'pending',
+    fecha_reversion TIMESTAMPTZ,
+    usuario_reversion VARCHAR(200)
 );
 
 CREATE INDEX IF NOT EXISTS idx_archivo_hash ON archivo_cargado (hash_archivo);
 CREATE INDEX IF NOT EXISTS idx_archivo_nombre ON archivo_cargado (nombre_archivo);
+CREATE INDEX IF NOT EXISTS idx_archivo_tabla ON archivo_cargado (tabla_destino);
+
+-- Relación archivo ↔ registros documentales insertados
+CREATE TABLE IF NOT EXISTS carga_archivo_registro (
+    id SERIAL PRIMARY KEY,
+    id_archivo INT NOT NULL REFERENCES archivo_cargado(id_archivo) ON DELETE CASCADE,
+    tabla TEXT NOT NULL,
+    row_hash TEXT NOT NULL,
+    id_registro INT,
+    fecha_vinculo TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (id_archivo, tabla, row_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_car_archivo ON carga_archivo_registro (id_archivo);
+CREATE INDEX IF NOT EXISTS idx_car_registro ON carga_archivo_registro (tabla, id_registro);
+
+CREATE TABLE IF NOT EXISTS archivo_carga_evento (
+    id_evento SERIAL PRIMARY KEY,
+    id_archivo INT REFERENCES archivo_cargado(id_archivo) ON DELETE SET NULL,
+    tabla_destino VARCHAR(100),
+    nombre_archivo VARCHAR(500),
+    evento VARCHAR(50) NOT NULL,
+    usuario VARCHAR(200),
+    detalle JSONB,
+    fecha_evento TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ace_archivo ON archivo_carga_evento (id_archivo);
+CREATE INDEX IF NOT EXISTS idx_ace_fecha ON archivo_carga_evento (fecha_evento DESC);
 
 -- ============================================================
 -- TABLA DE DUPLICADOS EN BASE DE DATOS

@@ -35,6 +35,50 @@ tr:hover td { background: #f5f8fc; }
 .pagination { display: flex; gap: 0.5rem; align-items: center; margin-top: 1rem; }
 .filters { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-bottom: 1rem; align-items: flex-end; }
 .filters label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem; color: #555; }
+.data-table { margin-top: 0.5rem; }
+.data-table-toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; margin-bottom: 0.75rem; }
+.data-table-search { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem; color: #555; }
+.data-table-search input { min-width: 160px; }
+.data-table-summary { font-size: 0.85rem; color: #555; margin-bottom: 0.5rem; }
+.data-table-scroll { overflow-x: auto; }
+.data-table-sortable { cursor: pointer; user-select: none; }
+.data-table-sort-icon { font-size: 0.7rem; opacity: 0.9; }
+.data-table-check { width: 40px; text-align: center; }
+.data-table-row-selected td { background: #eef3f8 !important; }
+.data-table-empty { text-align: center; color: #888; padding: 1.5rem !important; }
+.data-table-pagination { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 1rem; }
+.data-table-page-jump { display: flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; }
+.data-table-page-jump input { width: 4.5rem; padding: 0.35rem 0.5rem; }
+.data-table-page-select { padding: 0.4rem 0.5rem; font-size: 0.85rem; border: 1px solid #ccc; border-radius: 4px; }
+.badge { display: inline-block; padding: 0.15rem 0.45rem; border-radius: 4px; font-size: 0.72rem; font-weight: 600; text-transform: lowercase; }
+.badge-success { background: #c6f6d5; color: #22543d; }
+.badge-warning { background: #feebc8; color: #7b341e; }
+.badge-danger { background: #fed7d7; color: #822727; }
+.badge-info { background: #bee3f8; color: #2a4365; }
+.badge-muted { background: #e2e8f0; color: #4a5568; }
+.archivos-actions { display: flex; flex-direction: column; gap: 0.35rem; }
+.archivo-action-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.8rem; padding: 0.35rem 0.5rem; background: #f8fafc; border-radius: 4px; }
+.historial-eventos { font-size: 0.85rem; margin: 0.5rem 0 0.75rem 1.2rem; max-height: 200px; overflow-y: auto; }
+.historial-eventos li { margin-bottom: 0.35rem; }
+.historial-detalle { color: #666; font-size: 0.78rem; }
+.upload-resumen-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.6rem; margin: 0.75rem 0; }
+.upload-resumen-item { padding: 0.65rem; border-radius: 6px; text-align: center; }
+.upload-resumen-item.success { background: #f0fff4; border: 1px solid #9ae6b4; }
+.upload-resumen-item.warn { background: #fffaf0; border: 1px solid #f6ad55; }
+.upload-resumen-item.muted { background: #f7fafc; border: 1px solid #e2e8f0; }
+.upload-resumen-num { display: block; font-size: 1.4rem; font-weight: 700; color: #1a3a5c; }
+.upload-resumen-label { display: block; font-size: 0.78rem; font-weight: 600; margin-top: 0.2rem; }
+.upload-resumen-item small { display: block; font-size: 0.68rem; color: #666; margin-top: 0.15rem; }
+.dup-report-box { margin-top: 0.75rem; padding: 0.75rem; border-radius: 6px; }
+.dup-report-box h3 { font-size: 0.95rem; margin-bottom: 0.35rem; }
+.dup-report-box p { font-size: 0.85rem; margin-bottom: 0.5rem; color: #444; }
+.dup-report-bd { background: #e8f4fc; border: 1px solid #90cdf4; }
+.dup-report-file { background: #fff8eb; border: 1px solid #f6ad55; }
+.dup-detalle-list { max-height: 280px; overflow-y: auto; margin-top: 0.5rem; }
+.dup-detalle-item { padding: 0.5rem; margin-bottom: 0.4rem; border-radius: 4px; font-size: 0.82rem; }
+.dup-detalle-item p { margin: 0.2rem 0 0; color: #555; font-size: 0.78rem; }
+.dup-detalle-bd { background: #e8f4fc; border-left: 3px solid #3182ce; }
+.dup-detalle-ar { background: #fff8eb; border-left: 3px solid #dd6b20; }
 @media (max-width: 760px) {
   .topbar { height: auto; min-height: 64px; flex-wrap: wrap; padding: 0.8rem 1rem; }
   .user-summary { width: 100%; justify-content: space-between; }

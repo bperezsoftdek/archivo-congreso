@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import { API_AUTH, formatApiError } from '../utils/api'
+import DataTable from './DataTable'
+
+const USER_COLUMNS = ['id_usuario', 'username', 'nombre', 'rol', 'activo', 'acciones']
+const USER_LABELS = {
+  id_usuario: 'ID',
+  username: 'Usuario',
+  nombre: 'Nombre',
+  rol: 'Rol',
+  activo: 'Estado',
+  acciones: 'Acciones',
+}
 
 const EMPTY_FORM = { username: '', nombre: '', password: '', rol: 'operador', activo: true }
 
@@ -151,40 +162,42 @@ export default function UsuariosPanel({ token }) {
       {message && <div className="result-box">{message}</div>}
       {error && <div className="result-box error">{error}</div>}
 
-      <div style={{ overflowX: 'auto' }}>
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Usuario</th>
-              <th>Nombre</th>
-              <th>Rol</th>
-              <th>Estado</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map(user => (
-              <tr key={user.id_usuario}>
-                <td>{user.id_usuario}</td>
-                <td>{user.username}</td>
-                <td>{user.nombre}</td>
-                <td>{ROLES.find(role => role.value === user.rol)?.label || user.rol}</td>
-                <td>{user.activo ? 'Activo' : 'Inactivo'}</td>
-                <td>
-                  <div className="row-actions">
-                    <button className="btn secondary" onClick={() => editUser(user)}>Editar</button>
-                    <button className="btn secondary" onClick={() => toggleUser(user)}>
-                      {user.activo ? 'Desactivar' : 'Activar'}
-                    </button>
-                    <button className="btn danger" onClick={() => deleteUser(user)}>Eliminar</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        columns={USER_COLUMNS}
+        rows={users.map((u) => ({
+          ...u,
+          rol: ROLES.find((role) => role.value === u.rol)?.label || u.rol,
+          activo: u.activo ? 'Activo' : 'Inactivo',
+          _user: u,
+        }))}
+        columnLabels={USER_LABELS}
+        pk="id_usuario"
+        page={1}
+        totalPages={1}
+        total={users.length}
+        limit={users.length || 1}
+        onPageChange={() => {}}
+        searchFields={[]}
+        searchValues={{}}
+        showSearchButton={false}
+        renderCell={(row, col) => {
+          if (col !== 'acciones') return row[col] ?? ''
+          const user = row._user
+          return (
+            <div className="row-actions">
+              <button type="button" className="btn secondary" onClick={() => editUser(user)}>
+                Editar
+              </button>
+              <button type="button" className="btn secondary" onClick={() => toggleUser(user)}>
+                {user.activo ? 'Desactivar' : 'Activar'}
+              </button>
+              <button type="button" className="btn danger" onClick={() => deleteUser(user)}>
+                Eliminar
+              </button>
+            </div>
+          )
+        }}
+      />
     </div>
   )
 }

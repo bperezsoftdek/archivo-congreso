@@ -10,6 +10,11 @@ const STATUS_LABEL = {
   warning: 'Carga completada con advertencias',
 }
 
+const TIPO_DUP_LABEL = {
+  ya_en_base_de_datos: 'Ya en base de datos',
+  repetido_en_archivo: 'Repetido en el archivo',
+}
+
 export default function UploadPanel({ tablas, token }) {
   const [tabla, setTabla] = useState('')
   const [file, setFile] = useState(null)
@@ -118,7 +123,8 @@ export default function UploadPanel({ tablas, token }) {
 
   const handleDownloadReport = async (url, filename) => {
     try {
-      const res = await fetch(url, { headers: authHeaders })
+      const fullUrl = url.startsWith('http') ? url : `${API_BASE}${url}`
+      const res = await fetch(fullUrl, { headers: authHeaders })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         setJob(prev => ({
@@ -132,7 +138,7 @@ export default function UploadPanel({ tablas, token }) {
       const objectUrl = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = objectUrl
-      link.download = filename
+      link.download = filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -145,6 +151,7 @@ export default function UploadPanel({ tablas, token }) {
   const progress = job?.progress ?? 0
   const statusMsg = job ? (STATUS_LABEL[job.status] ?? job.status) : ''
   const allWarnings = job?.warnings || uploadWarnings
+  const r = job?.result
 
   return (
     <div className="card">
@@ -198,12 +205,12 @@ export default function UploadPanel({ tablas, token }) {
           {job.status === 'inserting' && job.total > 0 && (
             <p style={{ fontSize: '0.8rem', color: '#555', marginTop: '0.3rem' }}>
               {job.inserted.toLocaleString()} de {job.total.toLocaleString()} registros insertados
-              {job.duplicates > 0 && <span style={{ color: '#c05621' }}> · {job.duplicates} duplicados omitidos</span>}
+              {job.duplicates > 0 && <span style={{ color: '#c05621' }}> · {job.duplicates} filas omitidas (duplicados)</span>}
               {job.errors > 0 && <span style={{ color: '#e53e3e' }}> · {job.errors} errores</span>}
             </p>
           )}
-          {job.message && job.status !== 'error' && (
-            <p style={{ fontSize: '0.85rem', color: '#744210', marginTop: '0.4rem' }}>{job.message}</p>
+          {(job.message || r?.resumen) && job.status !== 'error' && (
+            <p style={{ fontSize: '0.85rem', color: '#744210', marginTop: '0.4rem' }}>{r?.resumen || job.message}</p>
           )}
         </div>
       )}
@@ -220,98 +227,107 @@ export default function UploadPanel({ tablas, token }) {
         )}
       </div>
 
-      {job?.status === 'done' && job.result && (
+      {job?.status === 'done' && r && (
         <div className="result-box" style={{ marginTop: '1rem' }}>
-          <p><strong>{job.result.insertadas.toLocaleString()}</strong> registros insertados correctamente de {job.result.total_filas_excel.toLocaleString()}</p>
-          {job.result.errores > 0 && (
-            <p style={{ color: '#c05621', marginTop: '0.3rem' }}>{job.result.errores} filas no se pudieron insertar</p>
-          )}
-          
-          <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#f5f5f5', borderRadius: 4 }}>
-            <strong style={{ display: 'block', marginBottom: '0.3rem' }}>Validación de duplicados:</strong>
-            <p style={{ margin: '0.2rem 0', fontSize: '0.9rem' }}>
-              <span style={{ color: '#c05621', fontWeight: 'bold' }}>{job.result.duplicados_bd || 0}</span> registros ya existían en BD
-            </p>
-            <p style={{ margin: '0.2rem 0', fontSize: '0.9rem' }}>
-              <span style={{ color: '#c05621', fontWeight: 'bold' }}>{job.result.duplicados_archivo || 0}</span> registros repetidos en el archivo
-            </p>
+          <p style={{ marginBottom: '0.75rem' }}>{r.resumen}</p>
+
+          <div className="upload-resumen-grid">
+            <div className="upload-resumen-item success">
+              <span className="upload-resumen-num">{r.insertadas?.toLocaleString() ?? 0}</span>
+              <span className="upload-resumen-label">Insertados en BD</span>
+            </div>
+            <div className="upload-resumen-item warn">
+              <span className="upload-resumen-num">{r.duplicados_bd?.toLocaleString() ?? 0}</span>
+              <span className="upload-resumen-label">Ya en base de datos</span>
+              <small>Mismos metadatos que un registro existente</small>
+            </div>
+            <div className="upload-resumen-item warn">
+              <span className="upload-resumen-num">{r.duplicados_archivo?.toLocaleString() ?? 0}</span>
+              <span className="upload-resumen-label">Repetidos en el Excel</span>
+              <small>Filas duplicadas dentro del archivo</small>
+            </div>
+            <div className="upload-resumen-item muted">
+              <span className="upload-resumen-num">{r.total_filas_excel?.toLocaleString() ?? 0}</span>
+              <span className="upload-resumen-label">Filas en el Excel</span>
+            </div>
           </div>
 
-          {job.result.columnas_no_encontradas?.length > 0 && (
+          {r.errores > 0 && (
+            <p style={{ color: '#c05621', marginTop: '0.5rem' }}>{r.errores} fila(s) con error de inserción</p>
+          )}
+
+          {r.columnas_no_encontradas?.length > 0 && (
             <p style={{ color: '#c05621', marginTop: '0.3rem' }}>
-              Columnas no encontradas: {job.result.columnas_no_encontradas.join(', ')}
+              Columnas no encontradas: {r.columnas_no_encontradas.join(', ')}
             </p>
           )}
 
-          {job.result.archivos_reporte?.duplicados_bd && (
-            <details style={{ marginTop: '0.5rem' }}>
-              <summary style={{ cursor: 'pointer', fontSize: '0.85rem', color: '#1a5490', fontWeight: 'bold' }}>
-                Duplicados en BD ({job.result.duplicados_bd})
-              </summary>
-              <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#e3f2fd', borderRadius: 4 }}>
-                <button 
-                  className="btn secondary"
-                  style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
-                  type="button"
-                  onClick={() => handleDownloadReport(
-                    job.result.archivos_reporte.duplicados_bd.url,
-                    job.result.archivos_reporte.duplicados_bd.filename
-                  )}
-                >
-                  Descargar reporte BD (.xlsx)
-                </button>
-              </div>
-            </details>
+          {r.archivos_reporte?.duplicados_bd && (
+            <div className="dup-report-box dup-report-bd">
+              <h3>{r.archivos_reporte.duplicados_bd.titulo || 'Duplicados en base de datos'}</h3>
+              <p>{r.archivos_reporte.duplicados_bd.descripcion}</p>
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() => handleDownloadReport(
+                  `${API_BASE}${r.archivos_reporte.duplicados_bd.url}`,
+                  r.archivos_reporte.duplicados_bd.filename,
+                )}
+              >
+                Descargar reporte (.xlsx)
+              </button>
+            </div>
           )}
 
-          {job.result.archivos_reporte?.duplicados_archivo && (
-            <details style={{ marginTop: '0.5rem' }}>
-              <summary style={{ cursor: 'pointer', fontSize: '0.85rem', color: '#ff8a00', fontWeight: 'bold' }}>
-                Repetidos en el archivo ({job.result.duplicados_archivo})
-              </summary>
-              <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#fff8f0', borderRadius: 4 }}>
-                <button 
-                  className="btn secondary"
-                  style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
-                  type="button"
-                  onClick={() => handleDownloadReport(
-                    job.result.archivos_reporte.duplicados_archivo.url,
-                    job.result.archivos_reporte.duplicados_archivo.filename
-                  )}
-                >
-                  Descargar reporte archivo (.xlsx)
-                </button>
-              </div>
-            </details>
+          {r.archivos_reporte?.duplicados_archivo && (
+            <div className="dup-report-box dup-report-file">
+              <h3>{r.archivos_reporte.duplicados_archivo.titulo || 'Repetidos en el archivo'}</h3>
+              <p>{r.archivos_reporte.duplicados_archivo.descripcion}</p>
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() => handleDownloadReport(
+                  `${API_BASE}${r.archivos_reporte.duplicados_archivo.url}`,
+                  r.archivos_reporte.duplicados_archivo.filename,
+                )}
+              >
+                Descargar reporte (.xlsx)
+              </button>
+            </div>
           )}
 
-          {job.result.registros_duplicados?.length > 0 && (
-            <details style={{ marginTop: '0.5rem' }}>
-              <summary style={{ cursor: 'pointer', fontSize: '0.85rem', color: '#c05621', fontWeight: 'bold' }}>
-                Ver detalles de registros duplicados ({job.result.registros_duplicados.length})
+          {(r.duplicados_detalle_bd?.length > 0 || r.duplicados_detalle_archivo?.length > 0) && (
+            <details style={{ marginTop: '0.75rem' }}>
+              <summary style={{ cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                Ver detalle de filas omitidas (
+                {(r.duplicados_detalle_bd?.length || 0) + (r.duplicados_detalle_archivo?.length || 0)})
               </summary>
-              <div style={{ marginTop: '0.5rem', maxHeight: 300, overflow: 'auto', background: '#fffbf0', padding: '0.5rem', borderRadius: 4, fontSize: '0.75rem' }}>
-                {job.result.registros_duplicados.map((reg, idx) => (
-                  <div key={idx} style={{ marginBottom: '0.3rem', paddingBottom: '0.3rem', borderBottom: '1px solid #ffe0cc' }}>
-                    <strong>Duplicado #{idx + 1}</strong>
-                    <ul style={{ margin: '0.2rem 0', paddingLeft: '1rem' }}>
-                      {Object.entries(reg).map(([k, v]) => (
-                        <li key={k}><span style={{ color: '#666' }}>{k}:</span> <strong>{String(v ?? 'null')}</strong></li>
-                      ))}
-                    </ul>
+              <div className="dup-detalle-list">
+                {r.duplicados_detalle_bd?.map((d, idx) => (
+                  <div key={`bd-${idx}`} className="dup-detalle-item dup-detalle-bd">
+                    <strong>Fila {d.fila_excel}</strong> — {TIPO_DUP_LABEL.ya_en_base_de_datos}
+                    {d.codigo_referencia && <> · Código: <em>{d.codigo_referencia}</em></>}
+                    <p>{d.mensaje}</p>
+                  </div>
+                ))}
+                {r.duplicados_detalle_archivo?.map((d, idx) => (
+                  <div key={`ar-${idx}`} className="dup-detalle-item dup-detalle-ar">
+                    <strong>Fila {d.fila_excel}</strong> — {TIPO_DUP_LABEL.repetido_en_archivo}
+                    {d.codigo_referencia && <> · Código: <em>{d.codigo_referencia}</em></>}
+                    <p>{d.mensaje}</p>
                   </div>
                 ))}
               </div>
             </details>
           )}
 
-          {job.result.detalle_errores?.length > 0 && (
+          {r.detalle_errores?.length > 0 && (
             <details style={{ marginTop: '0.5rem' }}>
               <summary style={{ cursor: 'pointer', fontSize: '0.85rem' }}>
-                Ver detalle de errores ({job.result.detalle_errores.length})
+                Ver detalle de errores ({r.detalle_errores.length})
               </summary>
               <pre style={{ fontSize: '0.75rem', maxHeight: 200, overflow: 'auto', marginTop: '0.5rem', background: '#fff8f8', padding: '0.5rem', borderRadius: 4 }}>
-                {job.result.detalle_errores.map(e => `Fila ${e.fila}: ${e.error}`).join('\n')}
+                {r.detalle_errores.map(e => `Fila ${e.fila}: ${e.error}`).join('\n')}
               </pre>
             </details>
           )}

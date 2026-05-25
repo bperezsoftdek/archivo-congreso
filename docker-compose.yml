@@ -15,6 +15,7 @@ services:
       # Volumen nombrado explícito: los datos sobreviven a restart/stop (no usar down -v).
       - pgdata:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./database/document_tables.sql:/docker-entrypoint-initdb.d/02-document_tables.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s

@@ -56,6 +56,14 @@ ACCESO RÁPIDO A LA APLICACIÓN
   Usuario por defecto (primera ejecución): admin / admin123
 
 --------------------------------------------------------------------------------
+HISTORIAL DE CAMBIOS (repositorio)
+--------------------------------------------------------------------------------
+
+  ../HISTORIAL_CAMBIOS.md
+    Registro cronológico de modificaciones: fecha, autor, referencia y
+    descripción. Actualizar en cada entrega o PR.
+
+--------------------------------------------------------------------------------
 COMANDO HABITUAL
 --------------------------------------------------------------------------------
 

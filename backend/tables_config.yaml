@@ -1,48 +1,123 @@
+# Plantilla de columnas Excel (índice 0-based, sin fila de encabezado)
+column_template:
+  nivel_descripcion:                 0
+  codigo_referencia:                 1
+  titulo_formal:                     2
+  titulo_atribuido:                  3
+  tipologia:                         4
+  tomo_caja_numero:                  5
+  alterno:                           6
+  carpeta:                           7
+  fecha_inicial_ano:                 8
+  fecha_inicial_mes:                 9
+  fecha_inicial_dia:                 10
+  fecha_final_ano:                   11
+  fecha_final_mes:                   12
+  fecha_final_dia:                   13
+  soporte:                           14
+  volumen:                           15
+  nombre_productor:                  16
+  historia_institucional:            17
+  historia_archivistica:             18
+  lugar:                             19
+  alcance_contenido:                 20
+  palabras_clave:                    21
+  funciones_congreso:                22
+  condiciones_acceso:                23
+  condiciones_reproduccion:          24
+  lengua_documentos:                 25
+  caracteristicas_tecnicas:          26
+  instrumentos_descripcion:          27
+  existencia_originales:             28
+  unidades_descripcion_relacionadas: 29
+  notas:                             30
+  nombre_digitador:                  31
+  reglas_normas:                     32
+  fecha_descripcion:                 33
+
+date_columns:
+  - fecha_inicial_ano
+  - fecha_inicial_mes
+  - fecha_inicial_dia
+  - fecha_final_ano
+  - fecha_final_mes
+  - fecha_final_dia
+
 tables:
   actas_sesiones:
     pk: id_acta
+    pk_label: "ID acta"
     label: "Actas de sesiones"
     subfondo_cod: ACT
-    # header=None — columnas por índice posicional (0-based)
-    columns:
-      nivel_descripcion:                 0
-      codigo_referencia:                 1
-      titulo_formal:                     2
-      titulo_atribuido:                  3
-      tipologia:                         4
-      tomo_caja_numero:                  5
-      alterno:                           6
-      carpeta:                           7
-      fecha_inicial_ano:                 8
-      fecha_inicial_mes:                 9
-      fecha_inicial_dia:                 10
-      fecha_final_ano:                   11
-      fecha_final_mes:                   12
-      fecha_final_dia:                   13
-      soporte:                           14
-      volumen:                           15
-      nombre_productor:                  16
-      historia_institucional:            17
-      historia_archivistica:             18
-      lugar:                             19
-      alcance_contenido:                 20
-      palabras_clave:                    21
-      funciones_congreso:                22
-      condiciones_acceso:                23
-      condiciones_reproduccion:          24
-      lengua_documentos:                 25
-      caracteristicas_tecnicas:          26
-      instrumentos_descripcion:          27
-      existencia_originales:             28
-      unidades_descripcion_relacionadas: 29
-      notas:                             30
-      nombre_digitador:                  31
-      reglas_normas:                     32
-      fecha_descripcion:                 33
-    date_columns:
-      - fecha_inicial_ano
-      - fecha_inicial_mes
-      - fecha_inicial_dia
-      - fecha_final_ano
-      - fecha_final_mes
-      - fecha_final_dia
+
+  proyectos_ley:
+    pk: id_proyecto_ley
+    pk_label: "ID proyecto de ley"
+    label: "Proyectos de ley"
+    subfondo_cod: PL
+
+  proyectos_ley_ia:
+    pk: id_proyecto_ley_ia
+    pk_label: "ID proyecto de ley IA"
+    label: "Proyecto de ley IA"
+    subfondo_cod: PLIA
+
+  proyectos_acto_legislativo:
+    pk: id_pal
+    pk_label: "ID proyecto acto legislativo"
+    label: "Proyectos de actos legislativos"
+    subfondo_cod: PAL
+
+  gacetas_congreso:
+    pk: id_gaceta
+    pk_label: "ID gaceta"
+    label: "Publicaciones seriadas gacetas"
+    subfondo_cod: GAC
+
+  anales:
+    pk: id_anal
+    pk_label: "ID anales"
+    label: "Publicaciones seriadas anales"
+    subfondo_cod: ANA
+
+  leyes:
+    pk: id_ley
+    pk_label: "ID ley"
+    label: "Leyes"
+    subfondo_cod: LEY
+
+  propuestas_ciudadanas:
+    pk: id_propuesta
+    pk_label: "ID propuesta"
+    label: "Propuestas ciudadanas"
+    subfondo_cod: PC
+
+  asamblea_constituyente:
+    pk: id_anc
+    pk_label: "ID ANC"
+    label: "Asamblea Nacional Constituyente"
+    subfondo_cod: ANC
+
+  ahl_ia:
+    pk: id_ahl_ia
+    pk_label: "ID AHL IA"
+    label: "AHL IA"
+    subfondo_cod: AHLIA
+
+  ahl_manual:
+    pk: id_ahl_manual
+    pk_label: "ID AHL Manual"
+    label: "AHL Manual"
+    subfondo_cod: AHLM
+
+  fondo_congreso:
+    pk: id_fondo_congreso
+    pk_label: "ID fondo congreso"
+    label: "Fondo Congreso"
+    subfondo_cod: FCON
+
+  fondo_congresito:
+    pk: id_fondo_congresito
+    pk_label: "ID fondo congresito"
+    label: "Fondo Congresito"
+    subfondo_cod: FCG

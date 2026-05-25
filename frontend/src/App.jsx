@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { API_BASE } from './utils/api'
 import UploadPanel from './components/UploadPanel'
+import ControlArchivosPanel from './components/ControlArchivosPanel'
 import ConsultaPanel from './components/ConsultaPanel'
 import RegistrosPanel from './components/RegistrosPanel'
 import LoginPanel from './components/LoginPanel'
@@ -44,6 +45,7 @@ export default function App() {
   const modules = [
     canUpload && { id: 'upload', label: 'Registro' },
     { id: 'consulta', label: 'Consulta' },
+    canUpload && { id: 'archivos', label: 'Control archivos' },
     isAdmin && { id: 'registros', label: 'Auditoria' },
     isAdmin && { id: 'usuarios', label: 'Usuarios' },
   ].filter(Boolean)
@@ -79,6 +81,9 @@ export default function App() {
           )}
           {tab === 'upload' && canUpload && <UploadPanel tablas={tablas} token={token} />}
           {tab === 'consulta' && <ConsultaPanel tablas={tablas} token={token} isAdmin={isAdmin} />}
+          {tab === 'archivos' && canUpload && (
+            <ControlArchivosPanel tablas={tablas} token={token} isAdmin={isAdmin} />
+          )}
           {tab === 'registros' && isAdmin && <RegistrosPanel token={token} />}
           {tab === 'usuarios' && isAdmin && <UsuariosPanel token={token} />}
         </main>

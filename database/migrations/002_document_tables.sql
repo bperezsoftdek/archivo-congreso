@@ -1,0 +1,3 @@
+-- Migración: tablas documentales para los 12 tipos restantes
+-- Desde la carpeta database/:
+--   psql -U congreso -d archivo_congreso -f document_tables.sql
