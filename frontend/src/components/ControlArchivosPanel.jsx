@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { API_BASE, formatApiError } from '../utils/api'
 import DataTable from './DataTable'
+import { useXlsxDownload } from '../utils/useXlsxDownload'
+import DownloadProgressCard from './DownloadProgressCard'
 
 const ESTADO_BADGE = {
   activo: 'badge-success',
@@ -73,6 +75,7 @@ export default function ControlArchivosPanel({ tablas, token, isAdmin }) {
   const [historial, setHistorial] = useState(null)
   const [confirmText, setConfirmText] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const { download, downloadProgress } = useXlsxDownload()
 
   const authHeaders = { Authorization: `Bearer ${token}` }
 
@@ -81,19 +84,15 @@ export default function ControlArchivosPanel({ tablas, token, isAdmin }) {
     if (filtroTabla) params.set('tabla', filtroTabla)
     if (filtroEstado) params.set('estado', filtroEstado)
     if (filtroNombre.trim()) params.set('nombre', filtroNombre.trim())
-    const res = await fetch(`${API_BASE}/archivos-control/exportar?${params}`, { headers: authHeaders })
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      setError(formatApiError(body, `HTTP ${res.status}`))
-      return
+    try {
+      await download({
+        url: `${API_BASE}/archivos-control/exportar?${params}`,
+        filename: `control_archivos_${new Date().toISOString().slice(0, 10)}.xlsx`,
+        headers: authHeaders,
+      })
+    } catch (e) {
+      setError(e.message)
     }
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `control_archivos_${new Date().toISOString().slice(0, 10)}.xlsx`
-    link.click()
-    URL.revokeObjectURL(url)
   }
 
   const fetchData = useCallback(
@@ -302,6 +301,7 @@ export default function ControlArchivosPanel({ tablas, token, isAdmin }) {
 
       {error && <div className="result-box error">{error}</div>}
       {message && <div className="result-box success">{message}</div>}
+      <DownloadProgressCard progress={downloadProgress} />
 
       <DataTable
         columns={TABLE_COLUMNS}

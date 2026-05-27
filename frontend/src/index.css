@@ -79,6 +79,14 @@ tr:hover td { background: #f5f8fc; }
 .dup-detalle-item p { margin: 0.2rem 0 0; color: #555; font-size: 0.78rem; }
 .dup-detalle-bd { background: #e8f4fc; border-left: 3px solid #3182ce; }
 .dup-detalle-ar { background: #fff8eb; border-left: 3px solid #dd6b20; }
+.download-progress-card { display: flex; align-items: center; gap: 0.75rem; background: #eef3f8; border: 1px solid #90cdf4; border-radius: 8px; padding: 0.75rem 1rem; margin: 0.75rem 0; min-width: 220px; max-width: 420px; box-shadow: 0 2px 8px rgba(26,58,92,0.10); }
+.download-progress-card.complete { background: #f0fff4; border-color: #9ae6b4; }
+.download-progress-icon { font-size: 1.4rem; flex-shrink: 0; }
+.download-progress-body { flex: 1; display: flex; flex-direction: column; gap: 0.3rem; }
+.download-progress-label { font-size: 0.85rem; font-weight: 600; color: #1a3a5c; }
+.download-progress-bar { height: 7px; background: #bee3f8; border-radius: 4px; overflow: hidden; }
+.download-progress-bar div { height: 100%; background: #1a3a5c; border-radius: 4px; transition: width 0.25s; }
+.download-progress-pct { font-size: 0.78rem; color: #2a4365; font-weight: 700; align-self: flex-end; }
 @media (max-width: 760px) {
   .topbar { height: auto; min-height: 64px; flex-wrap: wrap; padding: 0.8rem 1rem; }
   .user-summary { width: 100%; justify-content: space-between; }

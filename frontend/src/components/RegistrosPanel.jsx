@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { API_BASE, formatApiError } from '../utils/api'
 import DataTable from './DataTable'
+import { useXlsxDownload } from '../utils/useXlsxDownload'
+import DownloadProgressCard from './DownloadProgressCard'
 
 const OPERACIONES = ['', 'INSERT', 'UPDATE', 'DELETE', 'DELETE_MULTIPLE']
 
@@ -28,6 +30,7 @@ export default function RegistrosPanel({ token }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const { download, downloadProgress } = useXlsxDownload()
 
   const authHeaders = { Authorization: `Bearer ${token}` }
 
@@ -128,19 +131,15 @@ export default function RegistrosPanel({ token }) {
     Object.entries(filters).forEach(([k, v]) => {
       if (v !== '' && v != null) params.set(k, String(v))
     })
-    const res = await fetch(`${API_BASE}/registros/exportar?${params}`, { headers: authHeaders })
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      setError(formatApiError(body, `HTTP ${res.status}`))
-      return
+    try {
+      await download({
+        url: `${API_BASE}/registros/exportar?${params}`,
+        filename: `auditoria_${new Date().toISOString().slice(0, 10)}.xlsx`,
+        headers: authHeaders,
+      })
+    } catch (e) {
+      setError(e.message)
     }
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `auditoria_${new Date().toISOString().slice(0, 10)}.xlsx`
-    link.click()
-    URL.revokeObjectURL(url)
   }
 
   return (
@@ -151,6 +150,7 @@ export default function RegistrosPanel({ token }) {
       </p>
 
       {error && <div className="result-box error">{error}</div>}
+      <DownloadProgressCard progress={downloadProgress} />
 
       <div style={{ marginBottom: '0.75rem' }}>
         <button type="button" className="btn secondary" onClick={handleExport}>

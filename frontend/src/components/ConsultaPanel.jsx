@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { formatApiError, API_BASE } from '../utils/api'
 import DataTable from './DataTable'
+import { useXlsxDownload } from '../utils/useXlsxDownload'
+import DownloadProgressCard from './DownloadProgressCard'
 
 export default function ConsultaPanel({ tablas, token, isAdmin }) {
   const [tabla, setTabla] = useState('')
@@ -14,6 +16,7 @@ export default function ConsultaPanel({ tablas, token, isAdmin }) {
   const [selected, setSelected] = useState(new Set())
   const [deleting, setDeleting] = useState(false)
   const [deleteMessage, setDeleteMessage] = useState(null)
+  const { download, downloadProgress } = useXlsxDownload()
 
   const authHeaders = { Authorization: `Bearer ${token}` }
 
@@ -95,19 +98,15 @@ export default function ConsultaPanel({ tablas, token, isAdmin }) {
       if (field?.maps_to === 'id_registro') params.set('id_registro', String(v))
       else params.set(k, String(v))
     })
-    const res = await fetch(`${API_BASE}/exportar/${tabla}?${params}`, { headers: authHeaders })
-    if (!res.ok) {
-      const body = await res.json()
-      setError(formatApiError(body, `HTTP ${res.status}`))
-      return
+    try {
+      await download({
+        url: `${API_BASE}/exportar/${tabla}?${params}`,
+        filename: `${tabla}_${new Date().toISOString().slice(0, 10)}.xlsx`,
+        headers: authHeaders,
+      })
+    } catch (e) {
+      setError(e.message)
     }
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${tabla}_${new Date().toISOString().slice(0, 10)}.xlsx`
-    link.click()
-    URL.revokeObjectURL(url)
   }
 
   const toggleSelect = (rowIdx) => {
@@ -217,6 +216,7 @@ export default function ConsultaPanel({ tablas, token, isAdmin }) {
 
       {error && <div className="result-box error">{error}</div>}
       {deleteMessage && <div className="result-box success">{deleteMessage}</div>}
+      <DownloadProgressCard progress={downloadProgress} />
 
       {tabla && (
         <>
