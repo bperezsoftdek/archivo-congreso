@@ -270,7 +270,7 @@ export default function UploadPanel({ tablas, token }) {
                 type="button"
                 className="btn secondary"
                 onClick={() => handleDownloadReport(
-                  `${API_BASE}${r.archivos_reporte.duplicados_bd.url}`,
+                  r.archivos_reporte.duplicados_bd.url,
                   r.archivos_reporte.duplicados_bd.filename,
                 )}
               >
@@ -287,7 +287,7 @@ export default function UploadPanel({ tablas, token }) {
                 type="button"
                 className="btn secondary"
                 onClick={() => handleDownloadReport(
-                  `${API_BASE}${r.archivos_reporte.duplicados_archivo.url}`,
+                  r.archivos_reporte.duplicados_archivo.url,
                   r.archivos_reporte.duplicados_archivo.filename,
                 )}
               >
@@ -312,9 +312,16 @@ export default function UploadPanel({ tablas, token }) {
                 ))}
                 {r.duplicados_detalle_archivo?.map((d, idx) => (
                   <div key={`ar-${idx}`} className="dup-detalle-item dup-detalle-ar">
-                    <strong>Fila {d.fila_excel}</strong> — {TIPO_DUP_LABEL.repetido_en_archivo}
-                    {d.codigo_referencia && <> · Código: <em>{d.codigo_referencia}</em></>}
-                    <p>{d.mensaje}</p>
+                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
+                      <span>📋 <strong>Fila repetida: {d.fila_excel}</strong></span>
+                      {d.fila_original != null && (
+                        <span>🔁 Es igual a la <strong>fila {d.fila_original}</strong> (primera aparición)</span>
+                      )}
+                      {d.codigo_referencia && <span>Código: <em>{d.codigo_referencia}</em></span>}
+                    </div>
+                    <p style={{ margin: 0, fontSize: '0.82rem', color: '#744210' }}>
+                      Esta fila tiene exactamente los mismos datos que la fila {d.fila_original ?? '?'} del mismo archivo, por eso no se insertó.
+                    </p>
                   </div>
                 ))}
               </div>

@@ -11,7 +11,7 @@ import math
 import os
 import threading
 import uuid
-from datetime import datetime
+from datetime import datetime, date, time
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
@@ -79,7 +79,10 @@ def _rows_to_xlsx_bytes(rows: list, sheet_title: str = "Datos") -> bytes:
         _style_header_row(ws)
         for row in rows:
             r = dict(row)
-            ws.append([r.get(k) for k in keys])
+            ws.append([
+                v.replace(tzinfo=None) if isinstance(v, (datetime, date, time)) and getattr(v, 'tzinfo', None) else v
+                for v in (r.get(k) for k in keys)
+            ])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -394,37 +397,50 @@ def _seed_existing_hashes(conn, tabla: str, db_cols: list):
         cur.execute("SELECT 1 FROM carga_registros_hash WHERE tabla = %s LIMIT 1", [tabla])
         if cur.fetchone():
             return
+        cur.execute(f"SELECT COUNT(*) AS n FROM {tabla}")
+        if cur.fetchone()["n"] == 0:
+            return
 
-        cur.execute(f"SELECT {', '.join(db_cols)} FROM {tabla}")
-        rows = cur.fetchall()
+    BATCH = 10000
+    offset = 0
+    cols_sql = ", ".join(db_cols)
 
-    if not rows:
-        return
+    while True:
+        with get_cursor(conn) as cur:
+            cur.execute(
+                f"SELECT {cols_sql} FROM {tabla} ORDER BY (SELECT NULL) LIMIT %s OFFSET %s",
+                [BATCH, offset],
+            )
+            rows = cur.fetchall()
 
-    hash_buf = io.StringIO()
-    seen = set()
-    for row in rows:
-        row_hash = _row_hash(row, db_cols)
-        if row_hash in seen:
-            continue
-        seen.add(row_hash)
-        hash_buf.write(row_hash + "\n")
-    hash_buf.seek(0)
+        if not rows:
+            break
 
-    with get_cursor(conn) as cur:
-        cur.execute("CREATE TEMP TABLE IF NOT EXISTS tmp_existing_hashes (row_hash TEXT)")
-        cur.execute("TRUNCATE tmp_existing_hashes")
-        cur.copy_from(hash_buf, "tmp_existing_hashes", columns=["row_hash"], sep="\t")
-        cur.execute(
-            """
-            INSERT INTO carga_registros_hash (tabla, row_hash)
-            SELECT DISTINCT %s, row_hash
-            FROM tmp_existing_hashes
-            ON CONFLICT DO NOTHING
-            """,
-            [tabla],
-        )
-    conn.commit()
+        hash_buf = io.StringIO()
+        seen = set()
+        for row in rows:
+            row_hash = _row_hash(row, db_cols)
+            if row_hash in seen:
+                continue
+            seen.add(row_hash)
+            hash_buf.write(row_hash + "\n")
+        hash_buf.seek(0)
+
+        with get_cursor(conn) as cur:
+            cur.execute("CREATE TEMP TABLE IF NOT EXISTS tmp_existing_hashes (row_hash TEXT)")
+            cur.execute("TRUNCATE tmp_existing_hashes")
+            cur.copy_from(hash_buf, "tmp_existing_hashes", columns=["row_hash"], sep="\t")
+            cur.execute(
+                """
+                INSERT INTO carga_registros_hash (tabla, row_hash)
+                SELECT DISTINCT %s, row_hash
+                FROM tmp_existing_hashes
+                ON CONFLICT DO NOTHING
+                """,
+                [tabla],
+            )
+        conn.commit()
+        offset += BATCH
 
 
 def _mark_upload_history(job_id: str, estado: str, inserted: int = 0, errors: int = 0):
@@ -867,7 +883,7 @@ def _run_upload(
     _mark_upload_history(job_id, "done", inserted, len(errors))
 
     dup_bd_count = len(duplicados_bd)
-    dup_file_count = _count_duplicados_archivo(duplicados_archivo)
+    dup_file_count = len(duplicados_archivo_list)
     omitidas = dup_bd_count + dup_file_count
 
     resumen_texto = (
@@ -884,7 +900,7 @@ def _run_upload(
             if id_archivo and dup_bd_count > 0:
                 filepath_bd, filename_bd = _generate_duplicates_report(conn, id_archivo, tabla)
                 archivos_reporte['duplicados_bd'] = {
-                    'url': f'/api/exports/{filename_bd}',
+                    'url': f'/exports/{filename_bd}',
                     'filename': filename_bd,
                     'titulo': 'Duplicados en base de datos',
                     'descripcion': (
@@ -896,7 +912,7 @@ def _run_upload(
             if id_archivo and dup_file_count > 0:
                 filepath_archivo, filename_archivo = _generate_file_duplicates_report(conn, id_archivo, tabla)
                 archivos_reporte['duplicados_archivo'] = {
-                    'url': f'/api/exports/{filename_archivo}',
+                    'url': f'/exports/{filename_archivo}',
                     'filename': filename_archivo,
                     'titulo': 'Repetidos dentro del archivo Excel',
                     'descripcion': (
@@ -933,6 +949,7 @@ def _run_upload(
             "duplicados_detalle_archivo": [
                 {
                     "fila_excel": d.get("_excel_row"),
+                    "fila_original": d.get("_fila_original"),
                     "codigo_referencia": d.get("codigo_referencia"),
                     "tipo": "repetido_en_archivo",
                     "mensaje": d.get("mensaje_duplicado"),

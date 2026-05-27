@@ -1,0 +1,648 @@
+================================================================================
+  DIAGRAMAS DE ARQUITECTURA — ARCHIVO CONGRESO
+  Descripción para construcción de diagramas técnicos
+================================================================================
+
+
+================================================================================
+1. DIAGRAMA DE DESPLIEGUE (Infraestructura / Docker)
+================================================================================
+
+DESCRIPCIÓN:
+  Muestra los tres contenedores Docker y cómo se comunican entre sí.
+
+NODOS:
+  [Navegador del usuario]
+      │  HTTP :3000
+      ▼
+  [Contenedor: frontend]
+    - Imagen: Node (Vite + React 18)
+    - Puerto expuesto: 3000
+    - Volumen: ./frontend/src → /app/src
+    - Variable: VITE_API_URL
+    - Proxy /api → backend:8000
+      │  HTTP interno
+      ▼
+  [Contenedor: backend]
+    - Imagen: Python 3.11 + Uvicorn + FastAPI
+    - Puerto expuesto: 8000
+    - Volúmenes:
+        ./backend      → /app
+        uploads        → /app/uploads
+        exports_data   → /app/exports
+    - Variable: DATABASE_URL
+    - Depende de: postgres (healthcheck OK)
+      │  psycopg2 TCP :5432
+      ▼
+  [Contenedor: postgres]
+    - Imagen: postgres:15-alpine
+    - Puerto expuesto: 5432
+    - Volúmenes:
+        pgdata         → /var/lib/postgresql/data
+        init.sql       → /docker-entrypoint-initdb.d/01-init.sql
+        document_tables.sql → /docker-entrypoint-initdb.d/02-document_tables.sql
+    - Healthcheck: pg_isready cada 5s
+
+VOLÚMENES NOMBRADOS:
+  archivo_congreso_pgdata    — datos persistentes de PostgreSQL
+  archivo_congreso_uploads   — archivos Excel subidos por usuarios
+  archivo_congreso_exports   — reportes Excel generados (duplicados)
+
+
+================================================================================
+2. DIAGRAMA DE ARQUITECTURA DE CAPAS (N-Tier)
+================================================================================
+
+DESCRIPCIÓN:
+  Muestra las tres capas de la aplicación y sus responsabilidades.
+
+CAPA 1 — PRESENTACIÓN (Frontend)
+  Tecnología: React 18 + Vite
+  Componentes principales:
+    App.jsx              → Sesión, navegación, control de permisos por rol
+    LoginPanel.jsx       → Formulario de autenticación
+    UploadPanel.jsx      → Carga masiva con drag & drop, polling de progreso
+    ConsultaPanel.jsx    → Filtros, tabla paginada, exportación, eliminación
+    ControlArchivosPanel → Panel de control de archivos cargados
+    RegistrosPanel.jsx   → Auditoría de operaciones
+    UsuariosPanel.jsx    → CRUD de usuarios (solo admin)
+    DataTable.jsx        → Componente reutilizable de tabla
+  Comunicación: fetch() con Bearer token → /api/*
+
+CAPA 2 — LÓGICA DE NEGOCIO (Backend)
+  Tecnología: FastAPI + Python 3.11 + Uvicorn
+  Módulos:
+    main.py              → Instancia FastAPI, CORS, startup
+    routers/auth.py      → Autenticación y gestión de usuarios
+    routers/documentos.py→ Carga, consulta, exportación, auditoría, archivos
+    core/config.py       → Carga tables_config.yaml → dict TABLES
+    core/db.py           → Context managers get_db / get_cursor (psycopg2)
+    core/excel.py        → Lectura streaming openpyxl por chunks de 1000 filas
+    core/security.py     → Tokens HMAC-SHA256, PBKDF2, roles, dependencias
+  Configuración dinámica: tables_config.yaml define tablas sin recompilar
+
+CAPA 3 — DATOS (Base de datos)
+  Tecnología: PostgreSQL 15
+  Inicialización: init.sql + document_tables.sql al primer arranque
+  Esquema: ver Diagrama Relacional (sección 3)
+
+
+================================================================================
+3. DIAGRAMA RELACIONAL (Modelo Entidad-Relación)
+================================================================================
+
+DESCRIPCIÓN:
+  Todas las tablas de la base de datos, sus columnas clave y relaciones.
+
+── CATÁLOGO ARCHIVÍSTICO ──────────────────────────────────────────────────────
+
+  fondo
+    PK  id_fondo       SERIAL
+        cod_fondo      VARCHAR(50) UNIQUE
+        desc_fondo     TEXT
+
+  sub_fondo
+    PK  id_subfondo    SERIAL
+        cod_subfondo   VARCHAR(50) UNIQUE
+        desc_subfondo  TEXT
+        tabla_sql      TEXT          ← nombre de la tabla documental
+    FK  id_fondo       → fondo.id_fondo
+
+  Relación: fondo 1──N sub_fondo
+
+── TABLAS DOCUMENTALES (13 tablas, misma estructura) ─────────────────────────
+
+  Tablas: actas_sesiones, proyectos_ley, proyectos_ley_ia,
+          proyectos_acto_legislativo, gacetas_congreso, anales, leyes,
+          propuestas_ciudadanas, asamblea_constituyente, ahl_ia,
+          ahl_manual, fondo_congreso, fondo_congresito
+
+  Columnas comunes (ejemplo: actas_sesiones):
+    PK  id_acta                          SERIAL
+    FK  id_fondo                         → fondo.id_fondo
+    FK  id_subfondo                      → sub_fondo.id_subfondo
+        nivel_descripcion                TEXT
+        codigo_referencia                TEXT
+        titulo_formal                    TEXT
+        titulo_atribuido                 TEXT
+        tipologia                        TEXT
+        tomo_caja_numero                 TEXT
+        alterno                          TEXT
+        carpeta                          TEXT
+        fecha_inicial_ano/mes/dia        INT
+        fecha_final_ano/mes/dia          INT
+        soporte                          TEXT
+        volumen                          TEXT
+        nombre_productor                 TEXT
+        historia_institucional           TEXT
+        historia_archivistica            TEXT
+        lugar                            TEXT
+        alcance_contenido                TEXT
+        palabras_clave                   TEXT
+        funciones_congreso               TEXT
+        condiciones_acceso               TEXT
+        condiciones_reproduccion         TEXT
+        lengua_documentos                TEXT
+        caracteristicas_tecnicas         TEXT
+        instrumentos_descripcion         TEXT
+        existencia_originales            TEXT
+        unidades_descripcion_relacionadas TEXT
+        notas                            TEXT
+        nombre_digitador                 TEXT
+        reglas_normas                    TEXT
+        fecha_descripcion                TEXT
+
+  Relaciones:
+    fondo      1──N  [tabla_documental]
+    sub_fondo  1──N  [tabla_documental]
+
+── CONTROL DE USUARIOS ────────────────────────────────────────────────────────
+
+  usuarios
+    PK  id_usuario     SERIAL
+        username       TEXT UNIQUE
+        nombre         TEXT
+        password_hash  TEXT          ← pbkdf2_sha256$salt$hexdigest
+        rol            TEXT          ← CHECK: admin | operador | consulta
+        activo         BOOLEAN
+        fecha_creacion TIMESTAMPTZ
+
+── CONTROL DE CARGAS (archivos Excel) ────────────────────────────────────────
+
+  archivo_cargado
+    PK  id_archivo          SERIAL
+        nombre_archivo      VARCHAR(500)
+        ruta_archivo        TEXT
+        hash_archivo        VARCHAR(256) UNIQUE
+        tabla_destino       VARCHAR(100)
+        fecha_carga         TIMESTAMPTZ
+        usuario_carga       VARCHAR(200)
+        cantidad_registros  INT
+        registros_vinculados INT
+        registros_eliminados INT
+        estado              VARCHAR(50)   ← pending | done | revertido | error
+        fecha_reversion     TIMESTAMPTZ
+        usuario_reversion   VARCHAR(200)
+
+  carga_archivo_registro                 ← vínculo archivo ↔ fila insertada
+    PK  id                  SERIAL
+    FK  id_archivo          → archivo_cargado.id_archivo  (CASCADE DELETE)
+        tabla               TEXT
+        row_hash            TEXT
+        id_registro         INT           ← PK de la fila en tabla documental
+        fecha_vinculo       TIMESTAMPTZ
+    UNIQUE (id_archivo, tabla, row_hash)
+
+  archivo_carga_evento                   ← historial de eventos por archivo
+    PK  id_evento           SERIAL
+    FK  id_archivo          → archivo_cargado.id_archivo  (SET NULL on delete)
+        tabla_destino       VARCHAR(100)
+        nombre_archivo      VARCHAR(500)
+        evento              VARCHAR(50)   ← subida | completado | revertido
+        usuario             VARCHAR(200)
+        detalle             JSONB
+        fecha_evento        TIMESTAMPTZ
+
+  carga_archivos                         ← historial de jobs de carga
+    PK  id_carga            SERIAL
+        tabla               TEXT
+        nombre_archivo      TEXT
+        file_hash           TEXT
+        file_size           BIGINT
+        job_id              UUID
+        id_archivo          INT
+        estado              TEXT
+        filas_insertadas    INT
+        errores             INT
+        fecha_carga         TIMESTAMPTZ
+    UNIQUE (tabla, file_hash)
+
+  carga_registros_hash                   ← hashes para detección de duplicados
+    PK  (tabla, row_hash)
+        fecha_registro      TIMESTAMPTZ
+
+── DUPLICADOS ─────────────────────────────────────────────────────────────────
+
+  carga_duplicados_bd                    ← filas rechazadas por existir en BD
+    PK  id                  SERIAL
+    FK  id_archivo          → archivo_cargado.id_archivo  (CASCADE DELETE)
+        numero_fila_excel   INT
+        hash_registro       TEXT
+        registro_json       JSONB
+        id_existente_bd     INT
+        criterio_duplicidad TEXT
+        fecha_deteccion     TIMESTAMPTZ
+
+  carga_duplicados_archivo               ← filas repetidas dentro del Excel
+    PK  id                  SERIAL
+    FK  id_archivo          → archivo_cargado.id_archivo  (CASCADE DELETE)
+        numero_fila_original   INT
+        numero_fila_duplicada  INT
+        hash_registro          TEXT
+        registro_json          JSONB
+        criterio_duplicidad    TEXT
+        fecha_deteccion        TIMESTAMPTZ
+
+── AUDITORÍA ──────────────────────────────────────────────────────────────────
+
+  registro_operaciones                   ← trigger AFTER INSERT/UPDATE/DELETE
+    PK  id_registro         SERIAL
+        nombre_tabla        VARCHAR(100)
+        operacion           VARCHAR(6)    ← INSERT | UPDATE | DELETE
+        id_fila_afectada    INT
+        usuario             VARCHAR(100)
+        fecha_hora          TIMESTAMPTZ
+        datos_previos       JSONB
+        datos_nuevos        JSONB
+
+  Trigger: fn_auditoria() → aplicado a cada tabla documental
+           Lee app.audit_user (set_config) para registrar el usuario real
+
+
+================================================================================
+4. DIAGRAMA DE PROCESO — CARGA MASIVA DE EXCEL
+================================================================================
+
+DESCRIPCIÓN:
+  Flujo completo desde que el usuario sube un archivo hasta que los datos
+  quedan en la base de datos.
+
+ACTORES: Usuario, Frontend, Backend (hilo principal), Backend (hilo worker),
+         PostgreSQL
+
+PASOS:
+
+  [Usuario]
+    1. Selecciona tipo documental y archivo .xlsx
+    2. Hace clic en "Subir archivo"
+
+  [Frontend → Backend] POST /api/upload/{tabla}
+    3. Envía multipart/form-data con el archivo
+
+  [Backend — hilo principal]
+    4. Valida que la tabla exista en TABLES (tables_config.yaml)
+    5. Calcula SHA256 del archivo
+    6. Verifica en carga_archivos si el hash ya fue procesado → 409 si existe
+    7. Verifica si el nombre ya existe → agrega advertencia (no bloquea)
+    8. Inserta fila en carga_archivos (estado: processing)
+    9. Crea job_id (UUID) en dict _jobs (memoria)
+   10. Lanza hilo worker (threading.Thread)
+   11. Responde { job_id } inmediatamente al frontend
+
+  [Frontend — polling]
+   12. Cada 800ms: GET /api/upload/progress/{job_id}
+   13. Muestra barra de progreso y estado en pantalla
+
+  [Backend — hilo worker: _run_upload]
+   14. Estado: "reading"
+       → stream_excel_chunks(): openpyxl read_only, chunks de 1000 filas
+       → Mapea columnas por índice (col_map del YAML)
+       → Limpia valores: None, NaN, <br>, espacios
+       → Convierte columnas de fecha a INT
+
+   15. Registra archivo en archivo_cargado (estado: pending)
+   16. Guarda archivo físico en /app/uploads/{id}_{nombre}.xlsx
+
+   17. Estado: "checking"
+       → _get_catalog_ids(): obtiene id_fondo e id_subfondo desde sub_fondo
+       → _seed_existing_hashes(): si la tabla no tiene hashes previos,
+         calcula SHA256 de cada fila existente y los inserta en
+         carga_registros_hash (solo una vez por tabla)
+
+   18. Estado: "inserting" — por cada chunk de 1000 filas:
+       a. Asigna id_fondo e id_subfondo a cada registro
+       b. Calcula SHA256 de cada fila (_row_hash)
+       c. Consulta carga_registros_hash → separa nuevas vs duplicadas en BD
+       d. Detecta duplicadas dentro del mismo archivo (seen_in_upload set)
+       e. Inserta filas nuevas en lote (INSERT ... VALUES ... RETURNING pk)
+       f. Registra hashes nuevos en carga_registros_hash
+       g. Vincula cada fila insertada en carga_archivo_registro
+       h. Actualiza progreso en _jobs
+
+   19. Guarda duplicados en carga_duplicados_bd y carga_duplicados_archivo
+   20. Actualiza archivo_cargado (estado: done, cantidad_registros)
+   21. Genera reportes Excel de duplicados en /app/exports/ si los hay
+   22. Estado: "done" — escribe resultado final en _jobs
+
+  [Frontend]
+   23. Detecta status=done → muestra resumen:
+       - Insertados / Omitidos BD / Omitidos archivo / Total filas
+       - Detalle de filas omitidas con fila original vs fila repetida
+       - Botones de descarga de reportes Excel si hay duplicados
+
+
+================================================================================
+5. DIAGRAMA DE PROCESO — AUTENTICACIÓN Y CONTROL DE ACCESO
+================================================================================
+
+DESCRIPCIÓN:
+  Flujo de login y cómo se protegen los endpoints por rol.
+
+PASOS:
+
+  [Usuario]
+    1. Ingresa username y password en LoginPanel
+
+  [Frontend → Backend] POST /api/auth/login
+    2. Envía { username, password }
+
+  [Backend]
+    3. Busca usuario en tabla usuarios por username
+    4. Verifica contraseña: PBKDF2-HMAC-SHA256, 120000 iteraciones
+       Formato almacenado: pbkdf2_sha256$salt$hexdigest
+    5. Si OK: genera token HMAC-SHA256
+       Formato: base64url(payload).base64url(firma)
+       Payload: { sub, username, nombre, rol, exp (12h) }
+    6. Responde { token, user }
+
+  [Frontend]
+    7. Guarda en localStorage: archivo_session { token, user }
+    8. Cada request incluye: Authorization: Bearer <token>
+
+  [Backend — cada endpoint protegido]
+    9. HTTPBearer extrae el token
+   10. decode_token(): verifica firma HMAC y expiración
+   11. Consulta usuarios WHERE id_usuario = sub AND activo = true
+   12. require_roles(): verifica que el rol del usuario esté en la lista
+       permitida del endpoint → 403 si no tiene permiso
+
+ROLES Y PERMISOS:
+  admin    → todos los endpoints (lectura, escritura, eliminación, usuarios)
+  operador → carga de archivos, consulta, exportación, control de archivos
+  consulta → solo consulta y exportación de documentos
+
+
+================================================================================
+6. DIAGRAMA UML — CLASES DEL BACKEND
+================================================================================
+
+DESCRIPCIÓN:
+  Clases, funciones principales y sus relaciones en el backend Python.
+
+MÓDULO core/config.py
+  + TABLES: dict                    ← cargado desde tables_config.yaml
+  + load_config() → dict
+  + get_table_config(nombre) → dict ← lanza KeyError si no existe
+  + get_consulta_meta(cfg) → dict
+
+MÓDULO core/db.py
+  + get_db() → contextmanager[Connection]
+  + get_cursor(conn) → contextmanager[RealDictCursor]
+
+MÓDULO core/security.py
+  + TOKEN_SECRET: str
+  + TOKEN_TTL_SECONDS: int = 43200
+  + hash_password(password, salt) → str
+  + verify_password(password, stored) → bool
+  + create_token(user: dict) → str
+  + decode_token(token: str) → dict
+  + ensure_users_table()
+  + current_user(credentials) → dict     ← Depends FastAPI
+  + require_roles(*roles) → Depends      ← Depends FastAPI
+
+MÓDULO core/excel.py
+  + CHUNK_SIZE: int = 1000
+  + _clean_value(val, is_int) → Any
+  + stream_excel_chunks(bytes, col_map, date_cols)
+      → (Generator[list[dict]], total_rows: int, missing_cols: list)
+  + read_excel_chunks(bytes, col_map, date_cols)
+      → (list[list[dict]], total_rows: int, missing_cols: list)
+
+MÓDULO routers/documentos.py — funciones principales
+  + _jobs: dict                          ← estado en memoria por job_id
+  + _set_job(job_id, **kwargs)
+  + _row_hash(record, db_cols) → str     ← SHA256 de valores de la fila
+  + _filter_new_records(...) → (nuevas, dups_bd, dups_archivo, dups_dict)
+  + _insert_chunk_with_audit(...) → int  ← INSERT + RETURNING + vinculación
+  + _run_upload(job_id, tabla, content, cfg, nombre, usuario)
+      Fases: reading → checking → inserting → done | error
+  + _xlsx_response(rows, filename, sheet_title) → Response
+  + _rows_to_xlsx_bytes(rows, sheet_title) → bytes
+
+MÓDULO routers/auth.py — modelos Pydantic
+  LoginPayload      { username, password }
+  UserPayload       { username, nombre, password, rol, activo }
+  UserUpdatePayload { username, nombre, rol, activo, password? }
+
+
+================================================================================
+7. DIAGRAMA DE SECUENCIA — CONSULTA Y EXPORTACIÓN
+================================================================================
+
+DESCRIPCIÓN:
+  Flujo de consulta filtrada y descarga de Excel.
+
+  [Usuario] → aplica filtros en ConsultaPanel → clic "Buscar"
+
+  [Frontend → Backend]
+    GET /api/consultar/{tabla}
+    Parámetros: page, limit, sort, order, codigo_referencia,
+                titulo_formal, fecha_inicial_ano, fecha_final_ano,
+                palabras_clave, id_fondo, id_subfondo
+
+  [Backend]
+    1. Valida tabla en TABLES
+    2. Construye WHERE dinámico con parámetros seguros (%s)
+    3. JOIN con fondo y sub_fondo para nombres descriptivos
+    4. Ejecuta COUNT(*) para total de páginas
+    5. Ejecuta SELECT con LIMIT/OFFSET
+    6. Responde { total, page, limit, pk, column_labels, data[] }
+
+  [Frontend] → muestra tabla paginada → clic "Exportar Excel"
+
+  [Frontend → Backend]
+    GET /api/exportar/{tabla}
+    Mismos filtros, sin paginación, límite 50.000 filas
+
+  [Backend]
+    1. Ejecuta SELECT con los mismos filtros
+    2. _rows_to_xlsx_bytes(): crea libro openpyxl en memoria
+       - Encabezado con fondo azul oscuro (#1A3A5C) y texto blanco
+       - Valores datetime con tzinfo=None (compatibilidad Excel)
+    3. Responde como stream binario .xlsx con Content-Disposition
+
+
+================================================================================
+8. DIAGRAMA DE PROCESO — REVERSIÓN DE CARGA (Eliminación por archivo)
+================================================================================
+
+DESCRIPCIÓN:
+  Cómo se elimina un lote completo de registros vinculados a un archivo.
+
+PASOS:
+
+  [Usuario — admin]
+    1. En ControlArchivosPanel selecciona un archivo con estado "done"
+    2. Solicita preview: GET /api/archivos/{tabla}/{id}/preview-eliminacion
+       → Responde cuántos registros se eliminarán
+
+    3. Escribe el nombre exacto del archivo como confirmación
+    4. POST /api/archivos/{tabla}/{id}/eliminar-por-archivo
+       Body: { confirmar: true, texto_confirmacion: "nombre_archivo.xlsx" }
+
+  [Backend]
+    5. Verifica que texto_confirmacion == nombre_archivo (exacto)
+    6. Obtiene todos los id_registro de carga_archivo_registro
+    7. DELETE FROM {tabla} WHERE pk = ANY(ids) con trigger de auditoría
+    8. DELETE FROM carga_registros_hash (libera hashes para futura recarga)
+    9. _mark_archivo_revertido():
+       - UPDATE archivo_cargado SET estado='revertido', hash_archivo con sufijo :rev:{id}
+       - DELETE FROM carga_duplicados_bd / carga_duplicados_archivo
+       - DELETE FROM carga_archivos (libera hash para nueva subida)
+       - INSERT en archivo_carga_evento (evento: 'revertido')
+   10. Responde { eliminados, id_archivo, nombre_archivo, mensaje }
+
+  RESULTADO:
+    - Los registros documentales son eliminados (con auditoría)
+    - El archivo puede volver a subirse (hash liberado)
+    - El historial de la operación queda en archivo_carga_evento
+
+
+================================================================================
+9. DIAGRAMA DE COMPONENTES FRONTEND
+================================================================================
+
+DESCRIPCIÓN:
+  Árbol de componentes React y flujo de datos (props/estado).
+
+  App.jsx  (estado global: session, modulo, tablas)
+    │
+    ├── LoginPanel.jsx
+    │     Props: onLogin(session)
+    │     Llama: POST /api/auth/login
+    │
+    ├── UploadPanel.jsx
+    │     Props: tablas[], token
+    │     Estado: tabla, file, jobId, job, loading
+    │     Llama: POST /api/upload/{tabla}
+    │             GET  /api/upload/progress/{jobId}  (polling 800ms)
+    │             GET  /api/exports/{filename}        (descarga reportes)
+    │
+    ├── ConsultaPanel.jsx
+    │     Props: tablas[], token, rol
+    │     Estado: filtros, page, data, total, selected[]
+    │     Llama: GET /api/consultar/{tabla}
+    │             GET /api/exportar/{tabla}
+    │             DELETE /api/registros/{tabla}/{id}
+    │             POST /api/registros/delete-multiple/{tabla}
+    │     Usa: DataTable.jsx
+    │
+    ├── ControlArchivosPanel.jsx
+    │     Props: tablas[], token
+    │     Estado: filtros, page, data
+    │     Llama: GET  /api/archivos-control
+    │             GET  /api/archivos-control/exportar
+    │             GET  /api/archivos-control/{id}/historial
+    │             GET  /api/archivos/{tabla}/{id}/preview-eliminacion
+    │             POST /api/archivos/{tabla}/{id}/eliminar-por-archivo
+    │
+    ├── RegistrosPanel.jsx
+    │     Props: token
+    │     Llama: GET /api/registros
+    │             GET /api/registros/exportar
+    │
+    └── UsuariosPanel.jsx
+          Props: token
+          Llama: GET    /api/auth/usuarios
+                  POST   /api/auth/usuarios
+                  PUT    /api/auth/usuarios/{id}
+                  PATCH  /api/auth/usuarios/{id}/estado
+                  DELETE /api/auth/usuarios/{id}
+
+  utils/api.js
+    API_BASE  = VITE_API_URL || '/api'
+    API_AUTH  = API_BASE + '/auth'
+    formatApiError(body, fallback) → string
+
+
+================================================================================
+10. MAPA DE ENDPOINTS REST
+================================================================================
+
+DESCRIPCIÓN:
+  Todos los endpoints agrupados por recurso, método, roles y función.
+
+── AUTH  /api/auth ────────────────────────────────────────────────────────────
+
+  POST   /login                    público       → genera token HMAC
+  GET    /me                       autenticado   → datos del usuario actual
+  GET    /usuarios                 admin         → lista todos los usuarios
+  POST   /usuarios                 admin         → crea usuario
+  PUT    /usuarios/{id}            admin         → actualiza usuario completo
+  PATCH  /usuarios/{id}/estado     admin         → activa/desactiva usuario
+  DELETE /usuarios/{id}            admin         → elimina usuario
+
+── TABLAS  /api ───────────────────────────────────────────────────────────────
+
+  GET    /tablas                   autenticado   → lista tablas configuradas
+
+── CARGA  /api ────────────────────────────────────────────────────────────────
+
+  POST   /upload/{tabla}           admin,operador → inicia job async, retorna job_id
+  GET    /upload/progress/{job_id} admin,operador → estado del job (polling)
+
+── CONSULTA Y EXPORTACIÓN  /api ───────────────────────────────────────────────
+
+  GET    /consultar/{tabla}        autenticado   → datos paginados con filtros
+  GET    /exportar/{tabla}         autenticado   → descarga Excel hasta 50.000 filas
+
+── REGISTROS / AUDITORÍA  /api ────────────────────────────────────────────────
+
+  GET    /registros                admin         → auditoría paginada
+  GET    /registros/exportar       admin         → exporta auditoría a Excel
+  DELETE /registros/{tabla}/{id}   admin         → elimina un registro
+  POST   /registros/delete-multiple/{tabla} admin → elimina múltiples registros
+
+── CONTROL DE ARCHIVOS  /api ──────────────────────────────────────────────────
+
+  GET    /archivos-control                  admin,operador → panel de control
+  GET    /archivos-control/exportar         admin,operador → exporta panel a Excel
+  GET    /archivos-control/{id}/historial   admin,operador → eventos de un archivo
+  GET    /archivos/{tabla}                  admin,operador → archivos por tabla
+  GET    /archivos/{tabla}/{id}/preview-eliminacion  admin → preview de reversión
+  POST   /archivos/{tabla}/{id}/eliminar-por-archivo admin → revierte carga
+
+── REPORTES  /api ─────────────────────────────────────────────────────────────
+
+  GET    /exports/{filename}       admin,operador → descarga reporte de duplicados
+
+
+================================================================================
+11. DIAGRAMA DE CONFIGURACIÓN DINÁMICA (tables_config.yaml)
+================================================================================
+
+DESCRIPCIÓN:
+  Cómo se añade un nuevo tipo documental sin modificar código Python ni React.
+
+ESTRUCTURA DEL YAML:
+  column_template:              ← plantilla de columnas (índice 0-based)
+    nombre_columna_bd: índice_excel
+
+  date_columns:                 ← columnas que se convierten a INT
+    - nombre_columna
+
+  tables:
+    nombre_tabla_sql:
+      pk:          nombre_pk
+      pk_label:    "Etiqueta del PK"
+      label:       "Nombre visible en UI"
+      subfondo_cod: COD
+      columns:     (hereda column_template si no se especifica)
+
+FLUJO DE USO:
+  1. Agregar entrada en tables → sub_fondo (SQL)
+  2. Crear tabla en PostgreSQL con las mismas columnas
+  3. Agregar entrada en tables_config.yaml
+  4. Reiniciar backend → config.py recarga TABLES al importar
+  5. El frontend obtiene la nueva tabla vía GET /api/tablas
+  6. Todos los endpoints (upload, consultar, exportar) funcionan
+     automáticamente con la nueva tabla
+
+VALIDACIÓN DE SEGURIDAD:
+  Los nombres de tabla en endpoints vienen del YAML (no del cliente),
+  por lo que no hay riesgo de SQL injection en nombres de tabla.
+
+
+================================================================================
+FIN DEL DOCUMENTO
+================================================================================

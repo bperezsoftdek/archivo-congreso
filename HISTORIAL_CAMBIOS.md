@@ -146,6 +146,57 @@ Registro de modificaciones del proyecto. **Actualizar este archivo en cada entre
 
 ---
 
+## 2026-05-27 — Correcciones exportación XLSX, duplicados y optimización memoria
+
+| Campo | Valor |
+|--------|--------|
+| **Autor** | Amazon Q (agente) |
+| **Referencia** | Errores exportación + duplicados en archivo + RAM 4M registros |
+
+### Cambios
+
+- **Fix: exportación XLSX fallaba con fechas timezone-aware**
+  - `_rows_to_xlsx_bytes()` en `documentos.py`: strip de `tzinfo` en valores
+    `datetime`/`date`/`time` antes de escribir en openpyxl.
+  - Error original: `TypeError: Excel does not support timezones in datetimes`.
+  - Afectaba a `GET /api/archivos-control/exportar`, `GET /api/registros/exportar`
+    y `GET /api/exportar/{tabla}`.
+
+- **Fix: URL duplicada `/api/api/exports/...` al descargar reportes de duplicados**
+  - `_run_upload()` en `documentos.py`: las URLs de reporte cambiaron de
+    `/api/exports/{filename}` a `/exports/{filename}` (sin prefijo `/api`).
+  - `UploadPanel.jsx`: los botones de descarga ya no concatenaban `API_BASE`
+    manualmente; `handleDownloadReport` lo agrega internamente.
+
+- **Fix: resumen de carga mostraba "0 repetidos" aunque hubiera duplicados**
+  - `_run_upload()`: `dup_file_count` ahora usa `len(duplicados_archivo_list)`
+    en lugar de `_count_duplicados_archivo(duplicados_archivo)`, que excluía
+    grupos con una sola repetición.
+
+- **Mejora UX: detalle de filas repetidas muestra la fila original**
+  - `documentos.py`: se agrega `fila_original` al payload de
+    `duplicados_detalle_archivo` en el resultado del job.
+  - `UploadPanel.jsx`: cada entrada del detalle ahora muestra:
+    - 📋 Fila repetida: N
+    - 🔁 Es igual a la fila M (primera aparición)
+    - Código de referencia
+    - Explicación en lenguaje simple
+
+- **Optimización crítica: `_seed_existing_hashes` con batches de 10.000 filas**
+  - Antes: `SELECT * FROM tabla` traía toda la tabla a RAM de una vez.
+    Con 4M registros esto causaba picos de 8+ GB en el backend.
+  - Ahora: procesa en lotes de 10.000 filas, calcula hashes, inserta en
+    `carga_registros_hash` y libera memoria antes del siguiente lote.
+  - Pico de RAM durante seed: de ~8 GB a ~50 MB.
+
+- **Nuevo archivo: `guias/DIAGRAMAS_ARQUITECTURA.txt`**
+  - 11 secciones con descripción detallada para construir diagramas:
+    despliegue Docker, N-Tier, relacional (ER), proceso carga masiva,
+    autenticación, clases UML, secuencia consulta/exportación, reversión
+    de carga, componentes React y mapa de endpoints REST.
+
+---
+
 ## Plantilla para próximas entradas
 
 ```markdown

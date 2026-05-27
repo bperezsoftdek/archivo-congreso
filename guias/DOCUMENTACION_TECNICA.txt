@@ -5,6 +5,7 @@
 
 Versión documentada: estado actual del repositorio
 Stack: React 18 + Vite | FastAPI + Python 3 | PostgreSQL 15 | Docker Compose
+Última actualización: 2026-05-27
 
 
 ================================================================================
@@ -14,9 +15,10 @@ Stack: React 18 + Vite | FastAPI + Python 3 | PostgreSQL 15 | Docker Compose
 Archivo Congreso es una aplicación web de tres capas orientada a:
 
   - Importación masiva de metadatos archivísticos desde archivos Excel (.xlsx)
-  - Consulta filtrada, ordenamiento y exportación CSV
+  - Consulta filtrada, ordenamiento y exportación XLSX
   - Control de acceso por roles (admin, operador, consulta)
   - Detección de duplicados en carga y auditoría de operaciones
+  - Trazabilidad completa de archivos cargados con reversión por lote
 
 El diseño prioriza la configuración declarativa: nuevos tipos documentales se
 añaden vía SQL + tables_config.yaml sin recompilar lógica de negocio en Python
@@ -64,7 +66,7 @@ backend/
     core/
       config.py             — Carga tables_config.yaml → dict TABLES
       db.py                 — Context managers get_db / get_cursor
-      excel.py              — Lectura streaming openpyxl por chunks
+      excel.py              — Lectura streaming openpyxl por chunks (1000 filas)
       security.py           — Tokens HMAC, PBKDF2, roles, dependencias
   tables_config.yaml        — Definición de tablas y mapeo Excel
   requirements.txt
@@ -75,15 +77,26 @@ frontend/
     App.jsx                 — Sesión, navegación por módulos, permisos
     components/
       LoginPanel.jsx
-      UploadPanel.jsx       — Carga async con polling de job
-      ConsultaPanel.jsx     — Filtros, tabla, eliminación múltiple
+      UploadPanel.jsx       — Carga async con polling de job y detalle duplicados
+      ConsultaPanel.jsx     — Filtros, tabla, eliminación múltiple, exportación XLSX
+      ControlArchivosPanel.jsx — Panel de control de archivos cargados
       RegistrosPanel.jsx    — Vista auditoría
       UsuariosPanel.jsx
+      DataTable.jsx         — Componente reutilizable de tabla paginada
+    utils/
+      api.js                — API_BASE, API_AUTH, formatApiError
   vite.config.js            — Proxy /api
   Dockerfile
 
 database/
   init.sql                  — Esquema, triggers auditoría, datos semilla
+  document_tables.sql       — DDL de las 12 tablas documentales adicionales
+  migrations/               — Scripts de migración incremental
+
+guias/
+  DOCUMENTACION_TECNICA.txt — Este archivo
+  DIAGRAMAS_ARQUITECTURA.txt — Descripción para construcción de diagramas
+  01..09-*.txt              — Guías operativas por tema
 
 
 ================================================================================
@@ -112,7 +125,7 @@ database/
   )
 
   fn_auditoria() — Trigger AFTER INSERT/UPDATE/DELETE en tablas documentales.
-  Durante carga masiva: ALTER TABLE ... DISABLE TRIGGER ALL temporalmente.
+  Todos los INSERT de carga masiva quedan registrados (triggers activos).
 
 4.4 Control de duplicados y cargas
 ----------------------------------
@@ -183,14 +196,20 @@ Prefijo auth: /api/auth
 
 Prefijo documentos: /api
   GET    /tablas
-  POST   /upload/{tabla}              admin, operador — inicia job async
-  GET    /upload/progress/{job_id}    polling estado
-  GET    /consultar/{tabla}           filtros, paginación, orden
-  GET    /exportar/{tabla}            CSV stream
-  GET    /registros                   auditoría global
-  DELETE /registros/{tabla}/{id}      admin
+  POST   /upload/{tabla}                     admin, operador — inicia job async
+  GET    /upload/progress/{job_id}           polling estado
+  GET    /consultar/{tabla}                  filtros, paginación, orden
+  GET    /exportar/{tabla}                   XLSX stream
+  GET    /registros                          auditoría global
+  DELETE /registros/{tabla}/{id}             admin
   POST   /registros/delete-multiple/{tabla}  admin, body {ids:[]}
-  GET    /exports/{filename}          descarga reportes duplicados
+  GET    /archivos-control                   panel de control de archivos
+  GET    /archivos-control/exportar          exporta panel a XLSX
+  GET    /archivos-control/{id}/historial    eventos de un archivo
+  GET    /archivos/{tabla}                   archivos por tabla
+  GET    /archivos/{tabla}/{id}/preview-eliminacion
+  POST   /archivos/{tabla}/{id}/eliminar-por-archivo
+  GET    /exports/{filename}                 descarga reportes duplicados
 
 
 ================================================================================
@@ -221,39 +240,51 @@ Prefijo documentos: /api
      - _ensure_upload_history
      - _register_file_load → archivo_cargado
      - _get_catalog_ids → id_fondo, id_subfondo desde sub_fondo
-     - _seed_existing_hashes si tabla ya tenía datos
-     - DISABLE TRIGGER ALL en tabla destino
+     - _seed_existing_hashes: procesa en batches de 10.000 filas
+       (nunca trae toda la tabla a RAM; seguro con millones de registros)
      - synchronous_commit OFF (rendimiento)
 
   c) Por cada chunk:
      - _apply_catalog_ids
      - _filter_new_records:
-         * SHA256(json valores columnas)) → row_hash
-         * INSERT hashes nuevos en carga_registros_hash
-         * Separar new_records vs duplicate_records
-     - Inserción bulk: copy_from (TSV en memoria, null=\N)
-     - Si copy_from falla: rollback + INSERT fila a fila con manejo duplicado
+         * SHA256(json valores columnas) → row_hash
+         * Consulta carga_registros_hash → duplicados en BD
+         * seen_in_upload set → duplicados dentro del archivo
+         * Guarda _fila_original para mostrar comparación en UI
+     - _insert_chunk_with_audit: INSERT bulk con RETURNING pk
+     - _link_chunk_records: vincula cada fila a carga_archivo_registro
+     - _registrar_hashes_nuevos: inserta hashes en carga_registros_hash
      - Actualizar progreso en _jobs (thread-safe con _jobs_lock)
 
   d) Finalización:
-     - ENABLE TRIGGER ALL
      - _save_duplicates_to_db
      - Generar Excel reportes (_generate_duplicates_report, ...)
-     - _set_job status=done con result JSON
+       URLs generadas como /exports/{filename} (sin prefijo /api)
+     - _set_job status=done con result JSON incluyendo fila_original
+       en duplicados_detalle_archivo
 
 8.3 Detección de duplicados (lógica)
 ------------------------------------
   Hash de fila = SHA256 de JSON compacto de valores en db_cols ordenadas.
   Un hash solo puede insertarse una vez por tabla en carga_registros_hash.
-  Duplicado en BD: hash no retornado por INSERT ... ON CONFLICT DO NOTHING.
-  Duplicado en archivo: mismo hash aparece más de una vez en el chunk/job;
-  se agrupa en duplicados_archivo con números de fila.
+  Duplicado en BD: hash ya existe en carga_registros_hash.
+  Duplicado en archivo: mismo hash aparece más de una vez en el job;
+  se registra _fila_original (primera aparición) para mostrar comparación.
+  Conteo real: len(duplicados_archivo_list) — incluye todos los grupos.
 
-8.4 Cliente (UploadPanel.jsx)
+8.4 Exportación XLSX
+--------------------
+  _rows_to_xlsx_bytes(): convierte filas a bytes Excel en memoria.
+  - Encabezado con fondo azul oscuro (#1A3A5C) y texto blanco.
+  - Valores datetime/date/time con tzinfo=None (compatibilidad Excel).
+  Aplica a: exportar/{tabla}, registros/exportar, archivos-control/exportar.
+
+8.5 Cliente (UploadPanel.jsx)
 -----------------------------
-  Poll GET /upload/progress/{job_id} cada ~1s hasta done/error.
-  Renderiza progreso, contadores y <details> con registros_duplicados.
-  Enlaces a archivos_reporte si existen.
+  Poll GET /upload/progress/{job_id} cada 800ms hasta done/error.
+  Renderiza progreso, contadores y detalle de filas omitidas.
+  Cada fila repetida muestra: fila repetida, fila original, código, explicación.
+  handleDownloadReport: agrega API_BASE a URLs relativas (/exports/...).
 
 
 ================================================================================
@@ -340,11 +371,22 @@ Estilos: index.css clases (.app-shell, .sidebar, tablas, etc.).
 14. RENDIMIENTO Y OPTIMIZACIONES
 ================================================================================
 
-  - Lectura Excel streaming (no cargar libro completo en RAM)
-  - copy_from PostgreSQL por chunk
-  - synchronous_commit OFF durante bulk
-  - Triggers deshabilitados en carga (re-habilitados en finally)
+  - Lectura Excel streaming por chunks de 1000 filas (openpyxl read_only)
+  - _seed_existing_hashes en batches de 10.000 filas: seguro con millones
+    de registros, pico de RAM ~50 MB en lugar de varios GB
+  - INSERT bulk con RETURNING pk por chunk
+  - synchronous_commit OFF durante bulk insert
+  - Triggers de auditoría activos en toda la carga (sin DISABLE TRIGGER)
   - Timeout proxy y keep-alive extendidos (600s) para archivos grandes
+  - Exportación XLSX en memoria (BytesIO), sin archivos temporales
+
+  Estimación de recursos para 4 millones de registros:
+    RAM backend en reposo:       ~150 MB
+    RAM backend pico de carga:   2–4 GB (archivo Excel + sets de hashes)
+    RAM postgres con datos:      1–2 GB
+    Disco (datos + auditoría):   ~20–30 GB
+    CPU recomendado:             4 núcleos
+    RAM total recomendada:       16 GB
 
 
 ================================================================================
