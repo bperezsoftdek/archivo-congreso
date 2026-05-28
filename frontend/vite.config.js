@@ -10,12 +10,25 @@ export default defineConfig(({ mode }) => {
     server: {
       host: '0.0.0.0',
       allowedHosts: true,
+      
+      // 👇 CONFIGURACIÓN PARA REPARAR EL WEBSOCKET BAJO SSL LOCAL
+      hmr: {
+        host: '10.10.71.178', // La IP local de tu servidor Ubuntu
+        protocol: 'wss',      // Obliga a usar WebSocket Seguro (WSS) debido al SSL de Nginx
+        clientPort: 443,      // El puerto externo seguro que atiende Nginx
+      },
+
       proxy: {
         '/api': {
           target: proxyTarget,
           changeOrigin: true,
           timeout: 600000,
           proxyTimeout: 600000,
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => {
+              proxyReq.setHeader('x-forwarded-proto', 'https')
+            })
+          },
         },
       },
     },
