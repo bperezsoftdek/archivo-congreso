@@ -11,11 +11,11 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       allowedHosts: true,
       
-      // 👇 CONFIGURACIÓN PARA REPARAR EL WEBSOCKET BAJO SSL LOCAL
+      // Configuración de Hot Module Replacement sincronizada con Nginx
       hmr: {
-        host: '10.10.71.178', // La IP local de tu servidor Ubuntu
-        protocol: 'wss',      // Obliga a usar WebSocket Seguro (WSS) debido al SSL de Nginx
-        clientPort: 443,      // El puerto externo seguro que atiende Nginx
+        host: '10.10.71.178',
+        protocol: 'wss',   // Cambia a WebSocket Seguro ya que usamos HTTPS
+        clientPort: 443,   // Le dice a Vite que escuche a través del puerto seguro de Nginx
       },
 
       proxy: {
