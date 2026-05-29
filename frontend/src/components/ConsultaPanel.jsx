@@ -3,6 +3,7 @@ import { formatApiError, API_BASE } from '../utils/api'
 import DataTable from './DataTable'
 import { useXlsxDownload } from '../utils/useXlsxDownload'
 import DownloadProgressCard from './DownloadProgressCard'
+import EditModal from './EditModal'
 
 export default function ConsultaPanel({ tablas, token, isAdmin }) {
   const [tabla, setTabla] = useState('')
@@ -16,6 +17,9 @@ export default function ConsultaPanel({ tablas, token, isAdmin }) {
   const [selected, setSelected] = useState(new Set())
   const [deleting, setDeleting] = useState(false)
   const [deleteMessage, setDeleteMessage] = useState(null)
+  const [editingRow, setEditingRow] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [editError, setEditError] = useState(null)
   const { download, downloadProgress } = useXlsxDownload()
 
   const authHeaders = { Authorization: `Bearer ${token}` }
@@ -156,9 +160,34 @@ export default function ConsultaPanel({ tablas, token, isAdmin }) {
     }
   }
 
+  const handleSaveEdit = async (formData) => {
+    if (!editingRow) return
+    setSaving(true)
+    setEditError(null)
+    try {
+      const pk = data.pk || pkCol
+      const id = editingRow[pk]
+      const res = await fetch(`${API_BASE}/registros/${tabla}/${id}`, {
+        method: 'PUT',
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(formatApiError(body, `HTTP ${res.status}`))
+      setEditingRow(null)
+      setDeleteMessage('Registro actualizado exitosamente')
+      await fetchData(page)
+    } catch (e) {
+      setEditError(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const allColumns = data?.data?.[0] ? Object.keys(data.data[0]) : []
   const columns = allColumns.filter((c) => !hiddenColumns.includes(c))
-  const columnLabels = { ...baseColumnLabels, ...(data?.column_labels || {}) }
+  const columnsWithActions = isAdmin ? [...columns, '_acciones'] : columns
+  const columnLabels = { ...baseColumnLabels, ...(data?.column_labels || {}), _acciones: 'Acciones' }
   const totalPages = data ? Math.ceil(data.total / 50) : 0
 
   const extraFiltersUi = useMemo(
@@ -185,6 +214,19 @@ export default function ConsultaPanel({ tablas, token, isAdmin }) {
   return (
     <div className="card">
       <h2>Consulta de documentos</h2>
+
+      {editingRow && (
+        <EditModal
+          row={editingRow}
+          columns={columns.filter((c) => c !== pkCol)}
+          columnLabels={columnLabels}
+          pk={pkCol}
+          onSave={handleSaveEdit}
+          onCancel={() => { setEditingRow(null); setEditError(null) }}
+          saving={saving}
+          error={editError}
+        />
+      )}
 
       <div className="filters" style={{ marginBottom: '1rem' }}>
         <label>
@@ -234,7 +276,7 @@ export default function ConsultaPanel({ tablas, token, isAdmin }) {
           )}
 
           <DataTable
-            columns={columns}
+            columns={columnsWithActions}
             rows={data?.data ?? []}
             columnLabels={columnLabels}
             pk={pkCol}
@@ -256,6 +298,21 @@ export default function ConsultaPanel({ tablas, token, isAdmin }) {
             onToggleSelect={toggleSelect}
             onSelectAll={selectAll}
             extraFilters={extraFiltersUi}
+            renderCell={(row, col) => {
+              if (col === '_acciones') {
+                return (
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}
+                    onClick={() => { setEditingRow(row); setEditError(null) }}
+                  >
+                    Editar
+                  </button>
+                )
+              }
+              return row[col] ?? ''
+            }}
           />
         </>
       )}

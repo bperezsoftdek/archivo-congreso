@@ -17,6 +17,7 @@ const EMPTY_FORM = { username: '', nombre: '', password: '', rol: 'operador', ac
 const ROLES = [
   { value: 'admin', label: 'Administrador' },
   { value: 'operador', label: 'Registro y consulta' },
+  { value: 'registro', label: 'Registro, consulta, edición y eliminación' },
   { value: 'consulta', label: 'Solo consulta' },
 ]
 

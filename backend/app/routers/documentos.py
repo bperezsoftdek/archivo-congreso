@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query, 
 from fastapi.responses import FileResponse, Response
 from app.core.config import get_table_config, get_consulta_meta, TABLES
 from app.core.db import get_db, get_cursor
-from app.core.excel import CHUNK_SIZE, stream_excel_chunks
+from app.core.excel import CHUNK_SIZE, stream_excel_chunks, validate_excel_columns
 from app.core.security import current_user, require_roles
 import hashlib
 import io
@@ -962,8 +962,29 @@ def _run_upload(
     )
 
 
+@router.post("/upload/validar-columnas/{tabla}")
+async def validar_columnas_excel(
+    tabla: str,
+    file: UploadFile = File(...),
+    _: dict = Depends(require_roles("admin", "operador", "registro")),
+):
+    """Valida columnas y campos vacíos del Excel antes de la carga definitiva."""
+    try:
+        cfg = get_table_config(tabla)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    content = await file.read()
+    try:
+        resultado = validate_excel_columns(content, cfg["columns"])
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No se pudo leer el archivo: {e}")
+
+    return resultado
+
+
 @router.post("/upload/{tabla}")
-async def upload(tabla: str, file: UploadFile = File(...), user: dict = Depends(require_roles("admin", "operador"))):
+async def upload(tabla: str, file: UploadFile = File(...), user: dict = Depends(require_roles("admin", "operador", "registro"))):
     try:
         cfg = get_table_config(tabla)
     except KeyError as e:
@@ -1049,7 +1070,7 @@ async def upload(tabla: str, file: UploadFile = File(...), user: dict = Depends(
 
 
 @router.get("/upload/progress/{job_id}")
-def upload_progress(job_id: str, _: dict = Depends(require_roles("admin", "operador"))):
+def upload_progress(job_id: str, _: dict = Depends(require_roles("admin", "operador", "registro"))):
     with _jobs_lock:
         job = _jobs.get(job_id)
     if not job:
@@ -1245,7 +1266,7 @@ def listar_control_archivos(
     limit: int = Query(25, ge=1, le=200),
     estado: str = Query(None),
     nombre: str = Query(None),
-    _: dict = Depends(require_roles("admin", "operador")),
+    _: dict = Depends(require_roles("admin", "operador", "registro")),
 ):
     """Panel de control: todos los archivos subidos con estado, versión y presencia en disco."""
     conditions, params = [], []
@@ -1316,7 +1337,7 @@ def listar_control_archivos(
 @router.get("/archivos-control/{id_archivo}/historial")
 def historial_archivo(
     id_archivo: int,
-    _: dict = Depends(require_roles("admin", "operador")),
+    _: dict = Depends(require_roles("admin", "operador", "registro")),
 ):
     with get_db() as conn:
         _ensure_upload_history(conn)
@@ -1350,8 +1371,43 @@ def historial_archivo(
     }
 
 
+@router.put("/registros/{tabla}/{id_registro}")
+def editar_registro(
+    tabla: str,
+    id_registro: int,
+    body: dict = Body(...),
+    user: dict = Depends(require_roles("admin", "registro")),
+):
+    try:
+        cfg = get_table_config(tabla)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    pk = cfg["pk"]
+    edit_cols = {k: v for k, v in body.items() if k in cfg["columns"]}
+    if not edit_cols:
+        raise HTTPException(status_code=400, detail="No hay campos válidos para actualizar")
+
+    set_clause = ", ".join(f"{col} = %s" for col in edit_cols)
+    params = list(edit_cols.values()) + [id_registro]
+
+    with get_db() as conn:
+        with get_cursor(conn) as cur:
+            _set_audit_user(cur, user["username"])
+            cur.execute(
+                f"UPDATE {tabla} SET {set_clause} WHERE {pk} = %s RETURNING {pk}",
+                params,
+            )
+            updated = cur.fetchone()
+        conn.commit()
+
+    if not updated:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    return {"updated": True, "tabla": tabla, "id": id_registro}
+
+
 @router.delete("/registros/{tabla}/{id_registro}")
-def eliminar_registro(tabla: str, id_registro: int, user: dict = Depends(require_roles("admin"))):
+def eliminar_registro(tabla: str, id_registro: int, user: dict = Depends(require_roles("admin", "registro"))):
     try:
         cfg = get_table_config(tabla)
     except KeyError as e:
@@ -1372,7 +1428,7 @@ def eliminar_registro(tabla: str, id_registro: int, user: dict = Depends(require
 
 
 @router.post("/registros/delete-multiple/{tabla}")
-def eliminar_multiples(tabla: str, request_body: dict = Body(...), user: dict = Depends(require_roles("admin"))):
+def eliminar_multiples(tabla: str, request_body: dict = Body(...), user: dict = Depends(require_roles("admin", "registro"))):
     ids = request_body.get("ids", [])
     if not ids:
         raise HTTPException(status_code=400, detail="Se requiere lista de IDs a eliminar en campo 'ids'")
@@ -1508,7 +1564,7 @@ def exportar_control_archivos(
     tabla: str = Query(None),
     estado: str = Query(None),
     nombre: str = Query(None),
-    _: dict = Depends(require_roles("admin", "operador")),
+    _: dict = Depends(require_roles("admin", "operador", "registro")),
 ):
     conditions, params = [], []
     if tabla:
@@ -1708,7 +1764,7 @@ def listar_archivos_cargados(
     tabla: str,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    _: dict = Depends(require_roles("admin", "operador")),
+    _: dict = Depends(require_roles("admin", "operador", "registro")),
 ):
     try:
         get_table_config(tabla)

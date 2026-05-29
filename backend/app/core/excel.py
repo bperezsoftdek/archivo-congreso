@@ -26,6 +26,57 @@ def _clean_value(val: Any, is_int: bool = False) -> Any:
     return s
 
 
+def validate_excel_columns(file_bytes: bytes, col_map: dict) -> dict:
+    """
+    Detecta columnas faltantes y registros con campos vacíos.
+    Retorna:
+    - columnas_faltantes: campos cuyo índice supera el ancho del archivo
+    - registros_con_vacios: [ { fila, campos_vacios: [col, ...], codigo_referencia } ]
+    - total_filas: filas de datos (sin encabezado, sin filas completamente vacías)
+    """
+    workbook = load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
+    worksheet = workbook.active
+    total_cols = worksheet.max_column or 0
+
+    missing = [db_col for db_col, idx in col_map.items() if int(idx) >= total_cols]
+    available = {db_col: int(idx) for db_col, idx in col_map.items() if int(idx) < total_cols}
+
+    # índice de codigo_referencia para mostrarlo como identificador en la UI
+    cod_ref_idx = available.get("codigo_referencia")
+
+    registros_con_vacios = []
+    data_rows = 0
+
+    for row_idx, row in enumerate(worksheet.iter_rows(values_only=True), start=1):
+        if row_idx == 1:
+            continue  # saltar encabezado
+        if all(v is None for v in row):
+            continue
+        data_rows += 1
+        campos_vacios = [
+            db_col
+            for db_col, col_idx in available.items()
+            if (row[col_idx] if col_idx < len(row) else None) in (None, "")
+            or str(row[col_idx] if col_idx < len(row) else "").strip() == ""
+        ]
+        if campos_vacios:
+            cod_ref = None
+            if cod_ref_idx is not None and cod_ref_idx < len(row):
+                cod_ref = row[cod_ref_idx]
+            registros_con_vacios.append({
+                "fila": row_idx,
+                "campos_vacios": campos_vacios,
+                "codigo_referencia": str(cod_ref) if cod_ref is not None else None,
+            })
+
+    workbook.close()
+    return {
+        "columnas_faltantes": missing,
+        "registros_con_vacios": registros_con_vacios,
+        "total_filas": data_rows,
+    }
+
+
 def stream_excel_chunks(file_bytes: bytes, col_map: dict, date_cols: list):
     workbook = load_workbook(
         io.BytesIO(file_bytes),

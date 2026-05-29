@@ -30,7 +30,8 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL}
     volumes:
-      - ./backend:/app
+      - ./backend/app:/app/app
+      - ./backend/tables_config.yaml:/app/tables_config.yaml
       - uploads:/app/uploads
       - exports_data:/app/exports
     depends_on:

@@ -17,7 +17,9 @@ export default function App() {
   const token = session?.token
   const user = session?.user
   const isAdmin = user?.rol === 'admin'
-  const canUpload = user?.rol === 'admin' || user?.rol === 'operador'
+  const canUpload = user?.rol === 'admin' || user?.rol === 'operador' || user?.rol === 'registro'
+  const canDelete = user?.rol === 'admin' || user?.rol === 'registro'
+  const canRevert = isAdmin
 
   const onLogin = (nextSession) => {
     localStorage.setItem('archivo_session', JSON.stringify(nextSession))
@@ -80,9 +82,9 @@ export default function App() {
             </div>
           )}
           {tab === 'upload' && canUpload && <UploadPanel tablas={tablas} token={token} />}
-          {tab === 'consulta' && <ConsultaPanel tablas={tablas} token={token} isAdmin={isAdmin} />}
+          {tab === 'consulta' && <ConsultaPanel tablas={tablas} token={token} isAdmin={canDelete} />}
           {tab === 'archivos' && canUpload && (
-            <ControlArchivosPanel tablas={tablas} token={token} isAdmin={isAdmin} />
+            <ControlArchivosPanel tablas={tablas} token={token} isAdmin={canRevert} />
           )}
           {tab === 'registros' && isAdmin && <RegistrosPanel token={token} />}
           {tab === 'usuarios' && isAdmin && <UsuariosPanel token={token} />}

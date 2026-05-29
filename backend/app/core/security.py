@@ -14,7 +14,7 @@ from app.core.db import get_cursor, get_db
 
 TOKEN_SECRET = os.environ.get("TOKEN_SECRET", "archivo-congreso-local-secret")
 TOKEN_TTL_SECONDS = 12 * 60 * 60
-ROLES = {"admin", "operador", "consulta"}
+ROLES = {"admin", "operador", "consulta", "registro"}
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -78,11 +78,13 @@ def ensure_users_table():
                     username TEXT UNIQUE NOT NULL,
                     nombre TEXT NOT NULL,
                     password_hash TEXT NOT NULL,
-                    rol TEXT NOT NULL CHECK (rol IN ('admin', 'operador', 'consulta')),
+                    rol TEXT NOT NULL CHECK (rol IN ('admin', 'operador', 'consulta', 'registro')),
                     activo BOOLEAN NOT NULL DEFAULT TRUE,
                     fecha_creacion TIMESTAMPTZ DEFAULT NOW()
                 )
             """)
+            cur.execute("ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS usuarios_rol_check")
+            cur.execute("ALTER TABLE usuarios ADD CONSTRAINT usuarios_rol_check CHECK (rol IN ('admin', 'operador', 'consulta', 'registro'))")
             cur.execute("SELECT COUNT(*) AS total FROM usuarios")
             if cur.fetchone()["total"] == 0:
                 cur.execute(

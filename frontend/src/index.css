@@ -87,6 +87,27 @@ tr:hover td { background: #f5f8fc; }
 .download-progress-bar { height: 7px; background: #bee3f8; border-radius: 4px; overflow: hidden; }
 .download-progress-bar div { height: 100%; background: #1a3a5c; border-radius: 4px; transition: width 0.25s; }
 .download-progress-pct { font-size: 0.78rem; color: #2a4365; font-weight: 700; align-self: flex-end; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.modal-card { background: white; border-radius: 10px; padding: 1.5rem; max-width: 540px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,0.18); max-height: 90vh; display: flex; flex-direction: column; gap: 0.75rem; }
+.modal-title { font-size: 1.05rem; color: #1a3a5c; margin: 0; }
+.modal-desc { font-size: 0.85rem; color: #444; margin: 0; }
+.modal-card-wide { max-width: 780px; }
+.edit-modal-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 1rem; overflow-y: auto; max-height: 60vh; padding-right: 0.25rem; }
+.edit-modal-field { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem; color: #555; }
+.edit-modal-field input { padding: 0.4rem 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem; }
+.edit-modal-field input:focus { outline: none; border-color: #1a3a5c; box-shadow: 0 0 0 2px rgba(26,58,92,0.15); }
+@media (max-width: 760px) { .edit-modal-form { grid-template-columns: 1fr; } }
+.modal-resumen-cols { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.25rem; }
+.modal-resumen-badge { font-size: 0.72rem; background: #fff8eb; border: 1px solid #f6ad55; border-radius: 4px; padding: 0.15rem 0.45rem; color: #7b341e; }
+.modal-check-all { padding: 0.5rem 0.6rem; background: #f0f4f8; border-radius: 6px; }
+.modal-check-all label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+.modal-campos-list { list-style: none; overflow-y: auto; max-height: 280px; display: flex; flex-direction: column; gap: 0.3rem; padding: 0; margin: 0; }
+.modal-campos-list li { padding: 0.4rem 0.6rem; border-radius: 5px; background: #f7fafc; border: 1px solid #e2e8f0; transition: background 0.15s; }
+.modal-campos-list li.checked { background: #ebf8ff; border-color: #90cdf4; }
+.modal-campos-list li label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.83rem; }
+.modal-campo-name { flex: 1; font-weight: 600; color: #2d3748; }
+.modal-campo-count { font-size: 0.78rem; color: #c05621; background: #fff8eb; border: 1px solid #f6ad55; border-radius: 4px; padding: 0.1rem 0.4rem; white-space: nowrap; }
+.modal-actions { display: flex; gap: 0.6rem; padding-top: 0.25rem; }
 @media (max-width: 760px) {
   .topbar { height: auto; min-height: 64px; flex-wrap: wrap; padding: 0.8rem 1rem; }
   .user-summary { width: 100%; justify-content: space-between; }

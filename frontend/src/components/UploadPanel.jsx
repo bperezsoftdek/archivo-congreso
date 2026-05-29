@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { API_BASE, formatApiError } from '../utils/api'
+import CamposVaciosModal from './CamposVaciosModal'
 
 const STATUS_LABEL = {
   reading: 'Leyendo archivo...',
@@ -23,6 +24,10 @@ export default function UploadPanel({ tablas, token }) {
   const [job, setJob] = useState(null)
   const [uploadWarnings, setUploadWarnings] = useState([])
   const [loading, setLoading] = useState(false)
+  const [validating, setValidating] = useState(false)
+  const [colError, setColError] = useState(null)
+  const [camposVaciosData, setCamposVaciosData] = useState(null) // { campos, totalFilas }
+  const [pendingUpload, setPendingUpload] = useState(false)
   const inputRef = useRef()
   const pollRef = useRef()
 
@@ -30,6 +35,9 @@ export default function UploadPanel({ tablas, token }) {
 
   const clearSelectedFile = () => {
     setFile(null)
+    setColError(null)
+    setCamposVaciosData(null)
+    setPendingUpload(false)
     if (inputRef.current) inputRef.current.value = ''
   }
 
@@ -44,6 +52,9 @@ export default function UploadPanel({ tablas, token }) {
     setJob(null)
     setJobId(null)
     setUploadWarnings([])
+    setColError(null)
+    setCamposVaciosData(null)
+    setPendingUpload(false)
   }
 
   const handleDrop = (e) => {
@@ -84,8 +95,7 @@ export default function UploadPanel({ tablas, token }) {
     return () => clearInterval(pollRef.current)
   }, [jobId, token, uploadWarnings])
 
-  const handleUpload = async () => {
-    if (!tabla || !file) return
+  const doUpload = async () => {
     setLoading(true)
     setUploadWarnings([])
     setJob({ status: 'reading', progress: 0, inserted: 0, total: 0, errors: 0, duplicates: 0 })
@@ -119,6 +129,51 @@ export default function UploadPanel({ tablas, token }) {
       setJob({ status: 'error', message: e.message })
       setLoading(false)
     }
+  }
+
+  const handleUpload = async () => {
+    if (!tabla || !file) return
+    setColError(null)
+    setCamposVaciosData(null)
+    setValidating(true)
+
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await fetch(`${API_BASE}/upload/validar-columnas/${tabla}`, {
+        method: 'POST',
+        body: form,
+        headers: authHeaders,
+      })
+      const val = await res.json()
+      if (!res.ok) {
+        setColError(formatApiError(val, `Error HTTP ${res.status}`))
+        setValidating(false)
+        return
+      }
+
+      if (val.columnas_faltantes?.length > 0) {
+        setColError(
+          `El archivo no contiene las columnas requeridas (posición incorrecta o archivo equivocado): ${val.columnas_faltantes.join(', ')}`
+        )
+        setValidating(false)
+        return
+      }
+
+      if (val.registros_con_vacios?.length > 0) {
+        setCamposVaciosData({ registros: val.registros_con_vacios, totalFilas: val.total_filas })
+        setPendingUpload(true)
+        setValidating(false)
+        return
+      }
+    } catch (e) {
+      setColError(`Error al validar: ${e.message}`)
+      setValidating(false)
+      return
+    }
+
+    setValidating(false)
+    await doUpload()
   }
 
   const handleDownloadReport = async (url, filename) => {
@@ -157,6 +212,22 @@ export default function UploadPanel({ tablas, token }) {
     <div className="card">
       <h2>Carga masiva de documentos</h2>
 
+      {camposVaciosData && pendingUpload && (
+        <CamposVaciosModal
+          registros={camposVaciosData.registros}
+          totalFilas={camposVaciosData.totalFilas}
+          onConfirm={() => {
+            setCamposVaciosData(null)
+            setPendingUpload(false)
+            doUpload()
+          }}
+          onCancel={() => {
+            setCamposVaciosData(null)
+            setPendingUpload(false)
+          }}
+        />
+      )}
+
       <div className="filters" style={{ marginBottom: '1rem' }}>
         <label>
           Tipo documental
@@ -182,6 +253,12 @@ export default function UploadPanel({ tablas, token }) {
         <input ref={inputRef} type="file" accept=".xlsx,.xls" hidden
           onChange={e => handleFile(e.target.files[0])} />
       </div>
+
+      {colError && (
+        <div className="result-box error" style={{ marginTop: '0.75rem' }}>
+          🚫 {colError}
+        </div>
+      )}
 
       {allWarnings.length > 0 && (
         <div className="result-box" style={{ marginTop: '1rem', background: '#fff8e6', borderColor: '#f6ad55' }}>
@@ -216,8 +293,8 @@ export default function UploadPanel({ tablas, token }) {
       )}
 
       <div style={{ marginTop: '1rem' }}>
-        <button className="btn" onClick={handleUpload} disabled={!tabla || !file || loading}>
-          {loading ? 'Procesando...' : 'Subir archivo'}
+        <button className="btn" onClick={handleUpload} disabled={!tabla || !file || loading || validating}>
+          {validating ? 'Validando...' : loading ? 'Procesando...' : 'Subir archivo'}
         </button>
         {job?.status === 'done' && (
           <button className="btn secondary" style={{ marginLeft: '0.5rem' }}
