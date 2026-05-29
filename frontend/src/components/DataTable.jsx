@@ -1,220 +1,153 @@
-import { useState, useEffect } from 'react'
+import { useMemo } from 'react'
+import {
+  MaterialReactTable,
+  useMaterialReactTable,
+} from 'material-react-table'
+import { MRT_Localization_ES } from 'material-react-table/locales/es'
+import { Box, Tooltip, IconButton } from '@mui/material'
+import EditIcon from '@mui/icons-material/Edit'
+import DeleteIcon from '@mui/icons-material/Delete'
 
 /**
- * Tabla de consulta con búsqueda, ordenación y paginación (salto directo a página).
+ * DataTable universal basado en Material React Table.
+ *
+ * Props:
+ *  - columns: string[]           nombres de columnas
+ *  - rows: object[]              datos
+ *  - columnLabels: object        { col: 'Etiqueta' }
+ *  - pk: string                  nombre de la PK
+ *  - total: number               total de registros (server-side)
+ *  - page: number                página actual (1-based)
+ *  - pageSize: number            registros por página
+ *  - onPageChange: (page) => void
+ *  - onPageSizeChange: (size) => void
+ *  - loading: bool
+ *  - isAdmin: bool               muestra checkbox + acciones
+ *  - onEdit: (row) => void       callback editar fila
+ *  - onDelete: (rows) => void    callback eliminar seleccionados
+ *  - extraToolbar: ReactNode     botones adicionales en toolbar
+ *  - renderCell: (row, col) => ReactNode  render personalizado por celda
+ *  - enableVirtualization: bool  activar virtualización (default true)
  */
 export default function DataTable({
   columns = [],
   rows = [],
   columnLabels = {},
   pk = 'id',
-  page = 1,
-  totalPages = 0,
   total = 0,
-  limit = 50,
-  sort = '',
-  order = 'asc',
-  onSort,
+  page = 1,
+  pageSize = 50,
   onPageChange,
-  searchFields = [],
-  searchValues = {},
-  onSearchFieldChange,
-  onSearch,
+  onPageSizeChange,
   loading = false,
   isAdmin = false,
-  selected = new Set(),
-  onToggleSelect,
-  onSelectAll,
-  extraFilters = null,
-  renderCell = null,
-  showSearchButton = true,
+  onEdit,
+  onDelete,
+  extraToolbar,
+  renderCell,
+  enableVirtualization = true,
 }) {
-  const [pageInput, setPageInput] = useState(String(page))
+  const mrtColumns = useMemo(() => {
+    const dataCols = columns
+      .filter((c) => c !== '_acciones')
+      .map((col) => ({
+        accessorKey: col,
+        header: columnLabels[col] || col.replace(/_/g, ' '),
+        size: 160,
+        Cell: renderCell
+          ? ({ row }) => renderCell(row.original, col)
+          : undefined,
+      }))
 
-  useEffect(() => {
-    setPageInput(String(page))
-  }, [page])
+    return dataCols
+  }, [columns, columnLabels, renderCell])
 
-  const colLabel = (key) => columnLabels[key] || key.replace(/_/g, ' ')
+  const table = useMaterialReactTable({
+    columns: mrtColumns,
+    data: rows,
+    localization: MRT_Localization_ES,
 
-  const goToPage = () => {
-    const n = parseInt(pageInput, 10)
-    if (!Number.isFinite(n) || n < 1) return
-    const target = Math.min(Math.max(1, n), totalPages || 1)
-    onPageChange(target)
-  }
+    // ── Server-side pagination ──────────────────────────────
+    manualPagination: true,
+    rowCount: total,
+    onPaginationChange: (updater) => {
+      const prev = { pageIndex: page - 1, pageSize }
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      if (next.pageIndex !== prev.pageIndex) onPageChange?.(next.pageIndex + 1)
+      if (next.pageSize !== prev.pageSize) onPageSizeChange?.(next.pageSize)
+    },
+    state: {
+      pagination: { pageIndex: page - 1, pageSize },
+      isLoading: loading,
+    },
 
-  const pageOptions = totalPages > 0 && totalPages <= 200
-    ? Array.from({ length: totalPages }, (_, i) => i + 1)
-    : []
+    // ── Funcionalidades avanzadas ───────────────────────────
+    enableColumnFilterModes: true,
+    enableColumnOrdering: true,
+    enableColumnPinning: true,
+    enableFacetedValues: true,
+    enableGrouping: true,
+    enableColumnResizing: true,
+    enableStickyHeader: true,
+    enableDensityToggle: true,
+    enableHiding: true,
+    enableFullScreenToggle: true,
+    enableGlobalFilter: true,
+    enableRowSelection: isAdmin,
+    enableRowVirtualization: enableVirtualization,
+    columnVirtualizerOptions: { overscan: 4 },
+    rowVirtualizerOptions: { overscan: 10 },
 
-  const allSelected = rows.length > 0 && selected.size === rows.length
-
-  return (
-    <div className="data-table">
-      {(searchFields.length > 0 || extraFilters || showSearchButton) && (
-      <div className="data-table-toolbar">
-        {searchFields.map((f) => (
-          <label key={f.key} className="data-table-search">
-            <span>{f.label}</span>
-            <input
-              type={f.type || 'text'}
-              value={searchValues[f.key] ?? ''}
-              onChange={(e) => onSearchFieldChange(f.key, e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && onSearch?.()}
-              placeholder={f.placeholder || f.label}
-            />
-          </label>
-        ))}
-        {extraFilters}
-        {showSearchButton && onSearch && (
-          <button type="button" className="btn" onClick={onSearch} disabled={loading}>
-            {loading ? 'Buscando...' : 'Buscar'}
-          </button>
+    // ── Acciones por fila ───────────────────────────────────
+    enableRowActions: isAdmin && (!!onEdit || !!onDelete),
+    positionActionsColumn: 'last',
+    renderRowActions: ({ row }) => (
+      <Box sx={{ display: 'flex', gap: 0.5 }}>
+        {onEdit && (
+          <Tooltip title="Editar">
+            <IconButton size="small" color="primary" onClick={() => onEdit(row.original)}>
+              <EditIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         )}
-      </div>
-      )}
+        {onDelete && (
+          <Tooltip title="Eliminar">
+            <IconButton size="small" color="error" onClick={() => onDelete([row.original])}>
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
+      </Box>
+    ),
 
-      <p className="data-table-summary">
-        {total.toLocaleString()} registro(s)
-        {totalPages > 0 && ` · página ${page} de ${totalPages}`}
-        {selected.size > 0 && ` · ${selected.size} seleccionado(s)`}
-      </p>
+    // ── Toolbar personalizado ───────────────────────────────
+    renderTopToolbarCustomActions: ({ table }) => (
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+        {isAdmin && onDelete && table.getSelectedRowModel().rows.length > 0 && (
+          <Tooltip title="Eliminar seleccionados">
+            <span>
+              <IconButton
+                color="error"
+                onClick={() => onDelete(table.getSelectedRowModel().rows.map((r) => r.original))}
+              >
+                <DeleteIcon />
+              </IconButton>
+            </span>
+          </Tooltip>
+        )}
+        {extraToolbar}
+      </Box>
+    ),
 
-      <div className="data-table-scroll">
-        <table>
-          <thead>
-            <tr>
-              {isAdmin && (
-                <th className="data-table-check">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={onSelectAll}
-                    title="Seleccionar página"
-                  />
-                </th>
-              )}
-              {columns.map((c) => (
-                <th
-                  key={c}
-                  className={onSort ? 'data-table-sortable' : ''}
-                  onClick={() => onSort?.(c)}
-                >
-                  {colLabel(c)}
-                  {sort === c && (
-                    <span className="data-table-sort-icon">{order === 'asc' ? ' ▲' : ' ▼'}</span>
-                  )}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading && rows.length === 0 ? (
-              <tr>
-                <td colSpan={columns.length + (isAdmin ? 1 : 0)} className="data-table-empty">
-                  Cargando...
-                </td>
-              </tr>
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={columns.length + (isAdmin ? 1 : 0)} className="data-table-empty">
-                  Sin resultados
-                </td>
-              </tr>
-            ) : (
-              rows.map((row, i) => (
-                <tr key={row[pk] ?? i} className={selected.has(i) ? 'data-table-row-selected' : ''}>
-                  {isAdmin && (
-                    <td className="data-table-check">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(i)}
-                        onChange={() => onToggleSelect(i)}
-                      />
-                    </td>
-                  )}
-                  {columns.map((c) => (
-                    <td key={c} title={row[c] != null ? String(row[c]) : ''}>
-                      {renderCell ? renderCell(row, c, i) : (row[c] ?? '')}
-                    </td>
-                  ))}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+    // ── Estilos ─────────────────────────────────────────────
+    muiTableContainerProps: { sx: { maxHeight: '65vh' } },
+    muiTablePaperProps: { elevation: 2, sx: { borderRadius: 2 } },
+    initialState: {
+      density: 'compact',
+      showColumnFilters: false,
+      showGlobalFilter: true,
+    },
+  })
 
-      {totalPages > 0 && (
-        <div className="data-table-pagination">
-          <button
-            type="button"
-            className="btn secondary"
-            disabled={page <= 1 || loading}
-            onClick={() => onPageChange(1)}
-          >
-            Primera
-          </button>
-          <button
-            type="button"
-            className="btn secondary"
-            disabled={page <= 1 || loading}
-            onClick={() => onPageChange(page - 1)}
-          >
-            Anterior
-          </button>
-
-          <label className="data-table-page-jump">
-            <span>Página</span>
-            <input
-              type="number"
-              min={1}
-              max={totalPages}
-              value={pageInput}
-              onChange={(e) => setPageInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && goToPage()}
-            />
-            <span>de {totalPages}</span>
-            <button type="button" className="btn secondary" onClick={goToPage} disabled={loading}>
-              Ir
-            </button>
-          </label>
-
-          {pageOptions.length > 0 && (
-            <select
-              className="data-table-page-select"
-              value={page}
-              onChange={(e) => onPageChange(Number(e.target.value))}
-              disabled={loading}
-              aria-label="Seleccionar página"
-            >
-              {pageOptions.map((n) => (
-                <option key={n} value={n}>
-                  Pág. {n}
-                </option>
-              ))}
-            </select>
-          )}
-
-          <button
-            type="button"
-            className="btn secondary"
-            disabled={page >= totalPages || loading}
-            onClick={() => onPageChange(page + 1)}
-          >
-            Siguiente
-          </button>
-          <button
-            type="button"
-            className="btn secondary"
-            disabled={page >= totalPages || loading}
-            onClick={() => onPageChange(totalPages)}
-          >
-            Última
-          </button>
-        </div>
-      )}
-    </div>
-  )
+  return <MaterialReactTable table={table} />
 }

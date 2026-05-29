@@ -1,4 +1,9 @@
 import { useState, useMemo } from 'react'
+import {
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  Button, Checkbox, FormControlLabel, List, ListItem,
+  ListItemText, Typography, Chip, Box, Divider, Alert,
+} from '@mui/material'
 
 export default function CamposVaciosModal({ registros, totalFilas, onConfirm, onCancel }) {
   const [checked, setChecked] = useState(() => new Set(registros.map((r) => r.fila)))
@@ -12,83 +17,68 @@ export default function CamposVaciosModal({ registros, totalFilas, onConfirm, on
     setChecked(next)
   }
 
-  // Resumen de cuántos campos vacíos hay por columna (para el encabezado informativo)
   const resumenCols = useMemo(() => {
     const counts = {}
-    registros.forEach((r) =>
-      r.campos_vacios.forEach((col) => {
-        counts[col] = (counts[col] || 0) + 1
-      })
-    )
+    registros.forEach((r) => r.campos_vacios.forEach((col) => { counts[col] = (counts[col] || 0) + 1 }))
     return counts
   }, [registros])
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-card">
-        <h3 className="modal-title">⚠️ Registros con campos vacíos</h3>
-        <p className="modal-desc">
-          El archivo tiene <strong>{totalFilas}</strong> fila(s) de datos.{' '}
+    <Dialog open onClose={onCancel} maxWidth="sm" fullWidth>
+      <DialogTitle>⚠️ Registros con campos vacíos</DialogTitle>
+      <DialogContent dividers>
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          El archivo tiene <strong>{totalFilas}</strong> fila(s).{' '}
           <strong>{registros.length}</strong> registro(s) tienen al menos un campo vacío.
-          Marque los que desea incluir en la carga de todas formas, o cancele para corregir
-          el archivo.
-        </p>
+        </Alert>
 
-        {/* Resumen por columna */}
-        <div className="modal-resumen-cols">
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+          Campos afectados:
+        </Typography>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 2 }}>
           {Object.entries(resumenCols).map(([col, cnt]) => (
-            <span key={col} className="modal-resumen-badge">
-              {col}: {cnt}
-            </span>
+            <Chip key={col} label={`${col}: ${cnt}`} size="small" color="warning" variant="outlined" />
           ))}
-        </div>
+        </Box>
 
-        <div className="modal-check-all">
-          <label>
-            <input type="checkbox" checked={allChecked} onChange={toggleAll} />
-            <span>Marcar / desmarcar todos ({registros.length} registros)</span>
-          </label>
-        </div>
+        <Divider sx={{ mb: 1 }} />
+        <FormControlLabel
+          control={<Checkbox checked={allChecked} indeterminate={checked.size > 0 && !allChecked} onChange={toggleAll} />}
+          label={<Typography variant="body2" fontWeight={600}>Marcar / desmarcar todos ({registros.length})</Typography>}
+          sx={{ mb: 1 }}
+        />
 
-        <ul className="modal-campos-list">
+        <List dense disablePadding sx={{ maxHeight: 320, overflowY: 'auto' }}>
           {registros.map((r) => (
-            <li key={r.fila} className={checked.has(r.fila) ? 'checked' : ''}>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={checked.has(r.fila)}
-                  onChange={() => toggle(r.fila)}
-                />
-                <span className="modal-campo-name">
-                  Fila {r.fila}
-                  {r.codigo_referencia && (
-                    <em style={{ fontWeight: 400, marginLeft: '0.4rem', color: '#555' }}>
-                      — {r.codigo_referencia}
-                    </em>
-                  )}
-                </span>
-                <span className="modal-campo-count">
-                  {r.campos_vacios.join(', ')}
-                </span>
-              </label>
-            </li>
+            <ListItem key={r.fila} disablePadding sx={{ bgcolor: checked.has(r.fila) ? 'action.selected' : 'transparent', borderRadius: 1, mb: 0.25 }}>
+              <FormControlLabel
+                sx={{ width: '100%', mx: 0, px: 1 }}
+                control={<Checkbox size="small" checked={checked.has(r.fila)} onChange={() => toggle(r.fila)} />}
+                label={
+                  <ListItemText
+                    primary={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="body2" fontWeight={600}>Fila {r.fila}</Typography>
+                        {r.codigo_referencia && (
+                          <Typography variant="caption" color="text.secondary">— {r.codigo_referencia}</Typography>
+                        )}
+                      </Box>
+                    }
+                    secondary={r.campos_vacios.join(', ')}
+                    secondaryTypographyProps={{ fontSize: '0.75rem' }}
+                  />
+                }
+              />
+            </ListItem>
           ))}
-        </ul>
-
-        <div className="modal-actions">
-          <button
-            type="button"
-            className="btn"
-            onClick={() => onConfirm(Array.from(checked))}
-            disabled={checked.size === 0}
-          >
-            Continuar con {checked.size} registro(s)
-          </button>
-          <button type="button" className="btn secondary" onClick={onCancel}>
-            Cancelar
-          </button>
-        </div>
-      </div>
-    </div>
+        </List>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onCancel}>Cancelar</Button>
+        <Button variant="contained" onClick={() => onConfirm(Array.from(checked))} disabled={checked.size === 0}>
+          Continuar con {checked.size} registro(s)
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }

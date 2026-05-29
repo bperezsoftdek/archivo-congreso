@@ -1,3 +1,7 @@
+import {
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  Button, TextField, Grid, Alert, CircularProgress, Typography,
+} from '@mui/material'
 import { useState } from 'react'
 
 export default function EditModal({ row, columns, columnLabels, pk, onSave, onCancel, saving, error }) {
@@ -7,41 +11,40 @@ export default function EditModal({ row, columns, columnLabels, pk, onSave, onCa
     return initial
   })
 
-  const handleChange = (col, val) => setForm((prev) => ({ ...prev, [col]: val }))
-
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    onSave(form)
-  }
-
   const label = (col) => columnLabels[col] || col.replace(/_/g, ' ')
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-card modal-card-wide">
-        <h3 className="modal-title">✏️ Editar registro — {pk}: {row[pk]}</h3>
-        {error && <div className="result-box error" style={{ marginBottom: '0.5rem' }}>{error}</div>}
-        <form onSubmit={handleSubmit} className="edit-modal-form">
+    <Dialog open onClose={onCancel} maxWidth="md" fullWidth>
+      <DialogTitle>
+        ✏️ Editar registro
+        <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+          {pk}: {row[pk]}
+        </Typography>
+      </DialogTitle>
+      <DialogContent dividers>
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        <Grid container spacing={2} sx={{ mt: 0 }}>
           {columns.map((col) => (
-            <label key={col} className="edit-modal-field">
-              <span>{label(col)}</span>
-              <input
-                type="text"
+            <Grid item xs={12} sm={6} key={col}>
+              <TextField
+                label={label(col)}
                 value={form[col] ?? ''}
-                onChange={(e) => handleChange(col, e.target.value)}
+                onChange={(e) => setForm((p) => ({ ...p, [col]: e.target.value }))}
+                fullWidth
+                size="small"
+                multiline={String(form[col] ?? '').length > 80}
+                maxRows={4}
               />
-            </label>
+            </Grid>
           ))}
-          <div className="modal-actions" style={{ marginTop: '0.75rem' }}>
-            <button type="submit" className="btn" disabled={saving}>
-              {saving ? 'Guardando...' : 'Guardar cambios'}
-            </button>
-            <button type="button" className="btn secondary" onClick={onCancel} disabled={saving}>
-              Cancelar
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </Grid>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onCancel} disabled={saving}>Cancelar</Button>
+        <Button variant="contained" onClick={() => onSave(form)} disabled={saving}>
+          {saving ? <CircularProgress size={20} color="inherit" /> : 'Guardar cambios'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }
