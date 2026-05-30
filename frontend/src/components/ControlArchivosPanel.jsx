@@ -254,7 +254,7 @@ export default function ControlArchivosPanel({ tablas, token, isAdmin }) {
   return (
     <div className="card">
       <h2>Control de archivos</h2>
-      <p style={{ fontSize: '0.85rem', color: '#555', marginBottom: '1rem' }}>
+      <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>
         Historial de todos los Excel subidos: cuáles siguen activos, cuáles fueron revertidos
         (eliminados) y trazabilidad por eventos. Las cargas revertidas permanecen en la lista.
       </p>
@@ -309,15 +309,10 @@ export default function ControlArchivosPanel({ tablas, token, isAdmin }) {
         columnLabels={COLUMN_LABELS}
         pk="id_archivo"
         page={page}
-        totalPages={totalPages}
         total={data?.total ?? 0}
-        limit={data?.limit ?? 25}
+        pageSize={data?.limit ?? 25}
         onPageChange={(p) => fetchData(p)}
         loading={loading}
-        searchFields={[]}
-        searchValues={{}}
-        onSearchFieldChange={() => {}}
-        showSearchButton={false}
         renderCell={renderCell}
       />
 
@@ -353,13 +348,13 @@ export default function ControlArchivosPanel({ tablas, token, isAdmin }) {
       )}
 
       {preview && (
-        <div className="result-box" style={{ marginTop: '1rem', border: '1px solid #f5c6cb' }}>
+        <div className="result-box preview" style={{ marginTop: '1rem' }}>
           <p>
             <strong>{preview.mensaje}</strong>
           </p>
           {historial?.eventos?.length > 0 && (
-            <details style={{ marginBottom: '0.75rem' }}>
-              <summary style={{ cursor: 'pointer', fontSize: '0.85rem' }}>Ver historial de eventos</summary>
+            <details className="details-panel">
+              <summary className="details-summary-sm">Ver historial de eventos</summary>
               <ul className="historial-eventos" style={{ marginTop: '0.5rem' }}>
                 {historial.eventos.map((ev) => (
                   <li key={ev.id_evento}>

@@ -174,13 +174,9 @@ export default function UsuariosPanel({ token }) {
         columnLabels={USER_LABELS}
         pk="id_usuario"
         page={1}
-        totalPages={1}
         total={users.length}
-        limit={users.length || 1}
+        pageSize={users.length || 10}
         onPageChange={() => {}}
-        searchFields={[]}
-        searchValues={{}}
-        showSearchButton={false}
         renderCell={(row, col) => {
           if (col !== 'acciones') return row[col] ?? ''
           const user = row._user

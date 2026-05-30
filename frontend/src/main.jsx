@@ -1,10 +1,9 @@
-import { StrictMode, createContext, useContext, useMemo, useState } from 'react'
+import { StrictMode, useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createTheme, ThemeProvider, CssBaseline } from '@mui/material'
 import App from './App'
-
-export const ColorModeContext = createContext({ toggle: () => {}, mode: 'light' })
-export const useColorMode = () => useContext(ColorModeContext)
+import { ColorModeContext } from './colorModeContext'
+import './index.css'
 
 function Root() {
   const [mode, setMode] = useState(() => localStorage.getItem('colorMode') || 'light')
@@ -26,6 +25,10 @@ function Root() {
     },
     typography: { fontFamily: 'system-ui, sans-serif' },
   }), [mode])
+
+  useEffect(() => {
+    document.documentElement.dataset.colorMode = mode
+  }, [mode])
 
   return (
     <ColorModeContext.Provider value={colorMode}>

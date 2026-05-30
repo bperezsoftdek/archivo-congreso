@@ -9,6 +9,7 @@ import io
 import json
 import math
 import os
+import re
 import threading
 import uuid
 from datetime import datetime, date, time
@@ -66,6 +67,12 @@ def _style_header_row(ws, row_idx: int = 1):
         cell.alignment = Alignment(horizontal="center", vertical="center")
 
 
+def _safe_download_name(filename: str, default: str = "archivo.xlsx") -> str:
+    name = os.path.basename(filename or default)
+    name = re.sub(r"[^A-Za-z0-9_.-]+", "_", name).strip("._")
+    return name or default
+
+
 def _rows_to_xlsx_bytes(rows: list, sheet_title: str = "Datos") -> bytes:
     """Convierte filas (dict o RealDictRow) a bytes de un libro Excel."""
     wb = Workbook()
@@ -90,6 +97,7 @@ def _rows_to_xlsx_bytes(rows: list, sheet_title: str = "Datos") -> bytes:
 
 
 def _xlsx_response(rows: list, filename: str, sheet_title: str = "Datos") -> Response:
+    filename = _safe_download_name(filename)
     if not filename.lower().endswith(".xlsx"):
         filename = f"{filename}.xlsx"
     content = _rows_to_xlsx_bytes(rows, sheet_title)
@@ -241,7 +249,7 @@ def _ensure_upload_history(conn):
 def _save_uploaded_file(content: bytes, id_archivo: int, nombre_archivo: str) -> str:
     """Guarda el Excel en disco y retorna la ruta relativa."""
     os.makedirs(UPLOAD_DIR, exist_ok=True)
-    safe_name = os.path.basename(nombre_archivo or "archivo.xlsx")
+    safe_name = _safe_download_name(nombre_archivo or "archivo.xlsx")
     rel_path = os.path.join(UPLOAD_DIR, f"{id_archivo}_{safe_name}")
     with open(rel_path, "wb") as f:
         f.write(content)
@@ -568,23 +576,22 @@ def _save_duplicates_to_db(conn, id_archivo: int, tabla: str, duplicados_bd: lis
     if duplicados_archivo:
         with get_cursor(conn) as cur:
             for hash_val, filas in duplicados_archivo.items():
-                if len(filas) > 1:
-                    for i in range(1, len(filas)):
-                        cur.execute(
-                            """
-                            INSERT INTO carga_duplicados_archivo 
-                            (id_archivo, numero_fila_original, numero_fila_duplicada, hash_registro, registro_json, criterio_duplicidad)
-                            VALUES (%s, %s, %s, %s, %s, %s)
-                            """,
-                            [
-                                id_archivo,
-                                filas[i].get('_fila_original') or filas[0].get('_excel_row'),
-                                filas[i].get('_excel_row'),
-                                hash_val,
-                                json.dumps(filas[i], default=str, ensure_ascii=False),
-                                filas[i].get('tipo_duplicado') or 'repetido_en_archivo',
-                            ]
-                        )
+                for dup in filas:
+                    cur.execute(
+                        """
+                        INSERT INTO carga_duplicados_archivo
+                        (id_archivo, numero_fila_original, numero_fila_duplicada, hash_registro, registro_json, criterio_duplicidad)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        """,
+                        [
+                            id_archivo,
+                            dup.get('_fila_original'),
+                            dup.get('_excel_row'),
+                            hash_val,
+                            json.dumps(dup, default=str, ensure_ascii=False),
+                            dup.get('tipo_duplicado') or 'repetido_en_archivo',
+                        ]
+                    )
             conn.commit()
 
 
@@ -725,7 +732,7 @@ def _generate_file_duplicates_report(conn, id_archivo: int, tabla: str) -> str:
 
 def _count_duplicados_archivo(duplicados_archivo: dict) -> int:
     """Cuenta filas repetidas dentro del Excel (excluye la primera aparición de cada hash)."""
-    return sum(max(0, len(filas) - 1) for filas in duplicados_archivo.values())
+    return sum(len(filas) for filas in duplicados_archivo.values())
 
 
 def _run_upload(
@@ -1962,17 +1969,20 @@ def eliminar_por_archivo(
 @router.get("/exports/{filename}")
 def descargar_reporte(filename: str, _: dict = Depends(require_roles("admin", "operador"))):
     """Descarga reportes Excel de duplicados generados durante carga."""
-    filepath = os.path.join('exports', filename)
-    
+    safe_name = _safe_download_name(filename)
+    if safe_name != filename or not safe_name.startswith('duplicados_') or not safe_name.endswith('.xlsx'):
+        raise HTTPException(status_code=400, detail="Tipo de archivo no valido")
+
+    exports_dir = os.path.abspath('exports')
+    filepath = os.path.abspath(os.path.join(exports_dir, safe_name))
+    if not filepath.startswith(exports_dir + os.sep):
+        raise HTTPException(status_code=400, detail="Ruta de archivo no valida")
+
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
-    
-    # Validar que el archivo es del usuario actual (seguridad básica)
-    if not filename.startswith('duplicados_'):
-        raise HTTPException(status_code=400, detail="Tipo de archivo no válido")
-    
+
     return FileResponse(
         filepath,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        filename=safe_name,
     )

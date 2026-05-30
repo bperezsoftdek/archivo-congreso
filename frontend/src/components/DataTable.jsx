@@ -1,34 +1,10 @@
 import { useMemo } from 'react'
-import {
-  MaterialReactTable,
-  useMaterialReactTable,
-} from 'material-react-table'
+import { MaterialReactTable, useMaterialReactTable } from 'material-react-table'
 import { MRT_Localization_ES } from 'material-react-table/locales/es'
-import { Box, Tooltip, IconButton } from '@mui/material'
-import EditIcon from '@mui/icons-material/Edit'
+import { Box, IconButton, Tooltip } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/Delete'
+import EditIcon from '@mui/icons-material/Edit'
 
-/**
- * DataTable universal basado en Material React Table.
- *
- * Props:
- *  - columns: string[]           nombres de columnas
- *  - rows: object[]              datos
- *  - columnLabels: object        { col: 'Etiqueta' }
- *  - pk: string                  nombre de la PK
- *  - total: number               total de registros (server-side)
- *  - page: number                página actual (1-based)
- *  - pageSize: number            registros por página
- *  - onPageChange: (page) => void
- *  - onPageSizeChange: (size) => void
- *  - loading: bool
- *  - isAdmin: bool               muestra checkbox + acciones
- *  - onEdit: (row) => void       callback editar fila
- *  - onDelete: (rows) => void    callback eliminar seleccionados
- *  - extraToolbar: ReactNode     botones adicionales en toolbar
- *  - renderCell: (row, col) => ReactNode  render personalizado por celda
- *  - enableVirtualization: bool  activar virtualización (default true)
- */
 export default function DataTable({
   columns = [],
   rows = [],
@@ -39,6 +15,9 @@ export default function DataTable({
   pageSize = 50,
   onPageChange,
   onPageSizeChange,
+  sort,
+  order = 'asc',
+  onSort,
   loading = false,
   isAdmin = false,
   onEdit,
@@ -46,28 +25,30 @@ export default function DataTable({
   extraToolbar,
   renderCell,
   enableVirtualization = true,
+  enableRowSelection,
 }) {
-  const mrtColumns = useMemo(() => {
-    const dataCols = columns
-      .filter((c) => c !== '_acciones')
+  const dataColumns = useMemo(
+    () => columns
+      .filter((col) => col !== '_acciones')
       .map((col) => ({
         accessorKey: col,
         header: columnLabels[col] || col.replace(/_/g, ' '),
-        size: 160,
-        Cell: renderCell
-          ? ({ row }) => renderCell(row.original, col)
-          : undefined,
-      }))
-
-    return dataCols
-  }, [columns, columnLabels, renderCell])
+        size: col === pk ? 90 : col === 'acciones' ? 220 : 180,
+        minSize: col === pk ? 70 : col === 'acciones' ? 180 : 120,
+        enableColumnFilter: col !== 'acciones',
+        enableSorting: col !== 'acciones',
+        enableGrouping: col !== 'acciones',
+        Cell: renderCell ? ({ row }) => renderCell(row.original, col) : undefined,
+      })),
+    [columns, columnLabels, pk, renderCell],
+  )
 
   const table = useMaterialReactTable({
-    columns: mrtColumns,
+    columns: dataColumns,
     data: rows,
     localization: MRT_Localization_ES,
+    getRowId: (row, index) => String(row?.[pk] ?? index),
 
-    // ── Server-side pagination ──────────────────────────────
     manualPagination: true,
     rowCount: total,
     onPaginationChange: (updater) => {
@@ -76,31 +57,40 @@ export default function DataTable({
       if (next.pageIndex !== prev.pageIndex) onPageChange?.(next.pageIndex + 1)
       if (next.pageSize !== prev.pageSize) onPageSizeChange?.(next.pageSize)
     },
-    state: {
-      pagination: { pageIndex: page - 1, pageSize },
-      isLoading: loading,
+
+    manualSorting: Boolean(onSort),
+    onSortingChange: (updater) => {
+      if (!onSort) return
+      const prev = sort ? [{ id: sort, desc: order === 'desc' }] : []
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      const first = next?.[0]
+      onSort(first?.id || '', first?.desc ? 'desc' : 'asc')
     },
 
-    // ── Funcionalidades avanzadas ───────────────────────────
+    state: {
+      isLoading: loading,
+      pagination: { pageIndex: page - 1, pageSize },
+      sorting: sort ? [{ id: sort, desc: order === 'desc' }] : [],
+    },
+
     enableColumnFilterModes: true,
     enableColumnOrdering: true,
     enableColumnPinning: true,
-    enableFacetedValues: true,
-    enableGrouping: true,
     enableColumnResizing: true,
-    enableStickyHeader: true,
     enableDensityToggle: true,
-    enableHiding: true,
+    enableFacetedValues: true,
     enableFullScreenToggle: true,
     enableGlobalFilter: true,
-    enableRowSelection: isAdmin,
+    enableGrouping: true,
+    enableHiding: true,
+    enableStickyHeader: true,
     enableRowVirtualization: enableVirtualization,
+    enableRowSelection: enableRowSelection ?? (isAdmin && Boolean(onDelete)),
+    enableRowActions: Boolean(onEdit || onDelete),
+    positionActionsColumn: 'last',
     columnVirtualizerOptions: { overscan: 4 },
     rowVirtualizerOptions: { overscan: 10 },
 
-    // ── Acciones por fila ───────────────────────────────────
-    enableRowActions: isAdmin && (!!onEdit || !!onDelete),
-    positionActionsColumn: 'last',
     renderRowActions: ({ row }) => (
       <Box sx={{ display: 'flex', gap: 0.5 }}>
         {onEdit && (
@@ -120,31 +110,42 @@ export default function DataTable({
       </Box>
     ),
 
-    // ── Toolbar personalizado ───────────────────────────────
-    renderTopToolbarCustomActions: ({ table }) => (
-      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-        {isAdmin && onDelete && table.getSelectedRowModel().rows.length > 0 && (
-          <Tooltip title="Eliminar seleccionados">
-            <span>
+    renderTopToolbarCustomActions: ({ table }) => {
+      const selectedRows = table.getSelectedRowModel().rows
+      return (
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+          {onDelete && selectedRows.length > 0 && (
+            <Tooltip title="Eliminar seleccionados">
               <IconButton
                 color="error"
-                onClick={() => onDelete(table.getSelectedRowModel().rows.map((r) => r.original))}
+                onClick={() => onDelete(selectedRows.map((row) => row.original))}
               >
                 <DeleteIcon />
               </IconButton>
-            </span>
-          </Tooltip>
-        )}
-        {extraToolbar}
-      </Box>
-    ),
+            </Tooltip>
+          )}
+          {extraToolbar}
+        </Box>
+      )
+    },
 
-    // ── Estilos ─────────────────────────────────────────────
-    muiTableContainerProps: { sx: { maxHeight: '65vh' } },
-    muiTablePaperProps: { elevation: 2, sx: { borderRadius: 2 } },
+    muiTableContainerProps: { sx: { maxHeight: '68vh' } },
+    muiTablePaperProps: {
+      elevation: 1,
+      sx: { borderRadius: 1, overflow: 'hidden' },
+    },
+    muiPaginationProps: {
+      rowsPerPageOptions: [pageSize],
+    },
+    muiTableBodyCellProps: {
+      sx: {
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      },
+    },
     initialState: {
       density: 'compact',
-      showColumnFilters: false,
       showGlobalFilter: true,
     },
   })

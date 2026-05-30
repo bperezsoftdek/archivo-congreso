@@ -145,7 +145,7 @@ export default function RegistrosPanel({ token }) {
   return (
     <div className="card">
       <h2>Auditoría de operaciones</h2>
-      <p style={{ fontSize: '0.85rem', color: '#555', marginBottom: '1rem' }}>
+      <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>
         Registro de INSERT, UPDATE y DELETE en tablas documentales, con usuario de la aplicación.
       </p>
 
@@ -164,17 +164,18 @@ export default function RegistrosPanel({ token }) {
         columnLabels={COLUMN_LABELS}
         pk="id_registro"
         page={page}
-        totalPages={totalPages}
         total={data?.total ?? 0}
-        limit={50}
+        pageSize={50}
         onPageChange={(p) => fetchData(p)}
         loading={loading}
-        searchFields={[]}
-        searchValues={{}}
-        onSearchFieldChange={() => {}}
-        onSearch={() => fetchData(1)}
-        extraFilters={extraFilters}
-        showSearchButton
+        extraToolbar={
+          <>
+            {extraFilters}
+            <button type="button" className="btn" onClick={() => fetchData(1)} disabled={loading}>
+              Buscar
+            </button>
+          </>
+        }
       />
     </div>
   )

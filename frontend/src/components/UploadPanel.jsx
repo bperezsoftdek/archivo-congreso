@@ -261,7 +261,7 @@ export default function UploadPanel({ tablas, token }) {
       )}
 
       {allWarnings.length > 0 && (
-        <div className="result-box" style={{ marginTop: '1rem', background: '#fff8e6', borderColor: '#f6ad55' }}>
+        <div className="result-box warning" style={{ marginTop: '1rem' }}>
           {allWarnings.map((w, i) => <p key={i} style={{ margin: '0.25rem 0', fontSize: '0.9rem' }}>{w}</p>)}
         </div>
       )}
@@ -280,14 +280,14 @@ export default function UploadPanel({ tablas, token }) {
             }} />
           </div>
           {job.status === 'inserting' && job.total > 0 && (
-            <p style={{ fontSize: '0.8rem', color: '#555', marginTop: '0.3rem' }}>
+            <p className="text-muted" style={{ fontSize: '0.8rem', marginTop: '0.3rem' }}>
               {job.inserted.toLocaleString()} de {job.total.toLocaleString()} registros insertados
-              {job.duplicates > 0 && <span style={{ color: '#c05621' }}> · {job.duplicates} filas omitidas (duplicados)</span>}
-              {job.errors > 0 && <span style={{ color: '#e53e3e' }}> · {job.errors} errores</span>}
+              {job.duplicates > 0 && <span className="text-warning"> · {job.duplicates} filas omitidas (duplicados)</span>}
+              {job.errors > 0 && <span className="text-danger"> · {job.errors} errores</span>}
             </p>
           )}
           {(job.message || r?.resumen) && job.status !== 'error' && (
-            <p style={{ fontSize: '0.85rem', color: '#744210', marginTop: '0.4rem' }}>{r?.resumen || job.message}</p>
+            <p className="text-info" style={{ fontSize: '0.85rem', marginTop: '0.4rem' }}>{r?.resumen || job.message}</p>
           )}
         </div>
       )}
@@ -330,11 +330,11 @@ export default function UploadPanel({ tablas, token }) {
           </div>
 
           {r.errores > 0 && (
-            <p style={{ color: '#c05621', marginTop: '0.5rem' }}>{r.errores} fila(s) con error de inserción</p>
+            <p className="text-warning" style={{ marginTop: '0.5rem' }}>{r.errores} fila(s) con error de inserción</p>
           )}
 
           {r.columnas_no_encontradas?.length > 0 && (
-            <p style={{ color: '#c05621', marginTop: '0.3rem' }}>
+            <p className="text-warning" style={{ marginTop: '0.3rem' }}>
               Columnas no encontradas: {r.columnas_no_encontradas.join(', ')}
             </p>
           )}
@@ -374,8 +374,8 @@ export default function UploadPanel({ tablas, token }) {
           )}
 
           {(r.duplicados_detalle_bd?.length > 0 || r.duplicados_detalle_archivo?.length > 0) && (
-            <details style={{ marginTop: '0.75rem' }}>
-              <summary style={{ cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem' }}>
+            <details className="details-panel">
+              <summary className="details-summary">
                 Ver detalle de filas omitidas (
                 {(r.duplicados_detalle_bd?.length || 0) + (r.duplicados_detalle_archivo?.length || 0)})
               </summary>
@@ -396,7 +396,7 @@ export default function UploadPanel({ tablas, token }) {
                       )}
                       {d.codigo_referencia && <span>Código: <em>{d.codigo_referencia}</em></span>}
                     </div>
-                    <p style={{ margin: 0, fontSize: '0.82rem', color: '#744210' }}>
+                    <p className="text-info" style={{ margin: 0, fontSize: '0.82rem' }}>
                       Esta fila tiene exactamente los mismos datos que la fila {d.fila_original ?? '?'} del mismo archivo, por eso no se insertó.
                     </p>
                   </div>
@@ -406,11 +406,11 @@ export default function UploadPanel({ tablas, token }) {
           )}
 
           {r.detalle_errores?.length > 0 && (
-            <details style={{ marginTop: '0.5rem' }}>
-              <summary style={{ cursor: 'pointer', fontSize: '0.85rem' }}>
+            <details className="details-panel">
+              <summary className="details-summary-sm">
                 Ver detalle de errores ({r.detalle_errores.length})
               </summary>
-              <pre style={{ fontSize: '0.75rem', maxHeight: 200, overflow: 'auto', marginTop: '0.5rem', background: '#fff8f8', padding: '0.5rem', borderRadius: 4 }}>
+              <pre className="detail-pre">
                 {r.detalle_errores.map(e => `Fila ${e.fila}: ${e.error}`).join('\n')}
               </pre>
             </details>

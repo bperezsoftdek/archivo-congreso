@@ -1,13 +1,18 @@
 import { useState, useEffect } from 'react'
 import {
-  AppBar, Box, Drawer, IconButton, List, ListItemButton,
-  ListItemText, Toolbar, Typography, Tooltip, Divider, Avatar, Chip,
+  AppBar, Avatar, Box, Chip, Divider, Drawer, IconButton, List, ListItemButton,
+  ListItemIcon, ListItemText, Toolbar, Tooltip, Typography,
 } from '@mui/material'
 import Brightness4Icon from '@mui/icons-material/Brightness4'
 import Brightness7Icon from '@mui/icons-material/Brightness7'
 import LogoutIcon from '@mui/icons-material/Logout'
+import UploadFileIcon from '@mui/icons-material/UploadFile'
+import SearchIcon from '@mui/icons-material/Search'
+import FolderCopyIcon from '@mui/icons-material/FolderCopy'
+import HistoryIcon from '@mui/icons-material/History'
+import PeopleIcon from '@mui/icons-material/People'
 import { API_BASE } from './utils/api'
-import { useColorMode } from './main'
+import { useColorMode } from './colorModeContext'
 import UploadPanel from './components/UploadPanel'
 import ControlArchivosPanel from './components/ControlArchivosPanel'
 import ConsultaPanel from './components/ConsultaPanel'
@@ -17,9 +22,17 @@ import UsuariosPanel from './components/UsuariosPanel'
 
 const DRAWER_WIDTH = 240
 
+function loadSavedSession() {
+  try {
+    return JSON.parse(localStorage.getItem('archivo_session') || 'null')
+  } catch {
+    localStorage.removeItem('archivo_session')
+    return null
+  }
+}
+
 export default function App() {
-  const savedSession = JSON.parse(localStorage.getItem('archivo_session') || 'null')
-  const [session, setSession] = useState(savedSession)
+  const [session, setSession] = useState(loadSavedSession)
   const [tab, setTab] = useState('consulta')
   const [tablas, setTablas] = useState([])
   const [apiError, setApiError] = useState(null)
@@ -47,33 +60,31 @@ export default function App() {
 
   useEffect(() => {
     if (!token) return
+    setApiError(null)
     fetch(`${API_BASE}/tablas`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
       .then(setTablas)
-      .catch(e => setApiError(`No se pudo conectar al backend: ${e.message}`))
+      .catch((e) => setApiError(`No se pudo conectar al backend: ${e.message}`))
   }, [token])
 
   if (!session) return <LoginPanel onLogin={onLogin} />
 
   const modules = [
-    canUpload  && { id: 'upload',    label: 'Registro',         icon: '📥' },
-    true       && { id: 'consulta',  label: 'Consulta',         icon: '🔍' },
-    canUpload  && { id: 'archivos',  label: 'Control archivos', icon: '📁' },
-    isAdmin    && { id: 'registros', label: 'Auditoría',        icon: '📋' },
-    isAdmin    && { id: 'usuarios',  label: 'Usuarios',         icon: '👥' },
+    canUpload && { id: 'upload', label: 'Registro', icon: <UploadFileIcon /> },
+    { id: 'consulta', label: 'Consulta', icon: <SearchIcon /> },
+    canUpload && { id: 'archivos', label: 'Control archivos', icon: <FolderCopyIcon /> },
+    isAdmin && { id: 'registros', label: 'Auditoria', icon: <HistoryIcon /> },
+    isAdmin && { id: 'usuarios', label: 'Usuarios', icon: <PeopleIcon /> },
   ].filter(Boolean)
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      {/* AppBar */}
       <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1, bgcolor: 'primary.main' }}>
         <Toolbar sx={{ gap: 1 }}>
-          <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700, letterSpacing: 0.5 }}>
+          <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700, letterSpacing: 0 }}>
             Archivo Congreso
           </Typography>
-          {apiError && (
-            <Chip label={apiError} color="error" size="small" sx={{ maxWidth: 300 }} />
-          )}
+          {apiError && <Chip label={apiError} color="error" size="small" sx={{ maxWidth: 340 }} />}
           <Tooltip title={mode === 'light' ? 'Modo oscuro' : 'Modo claro'}>
             <IconButton color="inherit" onClick={toggle}>
               {mode === 'light' ? <Brightness4Icon /> : <Brightness7Icon />}
@@ -87,7 +98,7 @@ export default function App() {
               <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.2 }}>{user.nombre}</Typography>
               <Typography variant="caption" sx={{ opacity: 0.8 }}>{user.username} · {user.rol}</Typography>
             </Box>
-            <Tooltip title="Cerrar sesión">
+            <Tooltip title="Cerrar sesion">
               <IconButton color="inherit" onClick={logout}>
                 <LogoutIcon />
               </IconButton>
@@ -96,7 +107,6 @@ export default function App() {
         </Toolbar>
       </AppBar>
 
-      {/* Drawer */}
       <Drawer
         variant="permanent"
         sx={{
@@ -115,22 +125,19 @@ export default function App() {
               onClick={() => setTab(m.id)}
               sx={{ borderRadius: 1, mx: 0.5, my: 0.25 }}
             >
-              <ListItemText
-                primary={`${m.icon}  ${m.label}`}
-                primaryTypographyProps={{ fontSize: '0.9rem' }}
-              />
+              <ListItemIcon sx={{ minWidth: 34 }}>{m.icon}</ListItemIcon>
+              <ListItemText primary={m.label} primaryTypographyProps={{ fontSize: '0.9rem' }} />
             </ListItemButton>
           ))}
         </List>
       </Drawer>
 
-      {/* Contenido principal */}
-      <Box component="main" sx={{ flexGrow: 1, p: 3, mt: 8, minWidth: 0 }}>
-        {tab === 'upload'    && canUpload && <UploadPanel tablas={tablas} token={token} />}
-        {tab === 'consulta'  && <ConsultaPanel tablas={tablas} token={token} isAdmin={canDelete} />}
-        {tab === 'archivos'  && canUpload && <ControlArchivosPanel tablas={tablas} token={token} isAdmin={canRevert} />}
-        {tab === 'registros' && isAdmin   && <RegistrosPanel token={token} />}
-        {tab === 'usuarios'  && isAdmin   && <UsuariosPanel token={token} />}
+      <Box component="main" sx={{ flexGrow: 1, p: 3, mt: 8, minWidth: 0, maxWidth: 'none' }}>
+        {tab === 'upload' && canUpload && <UploadPanel tablas={tablas} token={token} />}
+        {tab === 'consulta' && <ConsultaPanel tablas={tablas} token={token} isAdmin={canDelete} />}
+        {tab === 'archivos' && canUpload && <ControlArchivosPanel tablas={tablas} token={token} isAdmin={canRevert} />}
+        {tab === 'registros' && isAdmin && <RegistrosPanel token={token} />}
+        {tab === 'usuarios' && isAdmin && <UsuariosPanel token={token} />}
       </Box>
     </Box>
   )
